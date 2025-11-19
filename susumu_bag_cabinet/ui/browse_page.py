@@ -581,22 +581,27 @@ class BrowsePage(QWidget):
             # Open Foxglove with the bag file path directly
             # Foxglove can handle both .mcap files and directory-based bags
             path_obj = Path(file_path)
+            mcap_file_to_open = None
 
             # If it's a .mcap file, use it directly
             if path_obj.is_file() and path_obj.suffix == '.mcap':
-                subprocess.Popen([command, str(path_obj)])
+                mcap_file_to_open = str(path_obj)
             # If it's a directory (old bag format), check for .mcap or .db3 inside
             elif path_obj.is_dir():
                 # Look for .mcap file in directory
                 mcap_files = list(path_obj.glob('*.mcap'))
                 if mcap_files:
-                    subprocess.Popen([command, str(mcap_files[0])])
+                    mcap_file_to_open = str(mcap_files[0])
                 else:
-                    # Fall back to opening the directory itself
-                    subprocess.Popen([command, str(path_obj)])
+                    # No .mcap file found
+                    raise FileNotFoundError(f"ディレクトリ内にMCAPファイルが見つかりません: {path_obj}")
             else:
-                # Fall back to original path
-                subprocess.Popen([command, str(file_path)])
+                raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
+
+            # Launch Foxglove with the MCAP file
+            if mcap_file_to_open:
+                print(f"Opening Foxglove with: {command} {mcap_file_to_open}")  # Debug
+                subprocess.Popen([command, mcap_file_to_open])
 
         except Exception as e:
             QMessageBox.critical(
