@@ -13,6 +13,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
 from susumu_bag_cabinet.utils.bag_utils import format_size
+from susumu_bag_cabinet.utils.bag_operations import repair_bag, compress_bag
 from susumu_bag_cabinet.workers.bag_scanner import BagScanner
 
 
@@ -329,11 +330,41 @@ class BrowsePage(QWidget):
             QMessageBox.information(self, "情報", "ファイルが選択されていません。")
             return
 
-        QMessageBox.information(
+        # Ask user to confirm and select compression format
+        from PySide6.QtWidgets import QInputDialog
+        formats = ["zstd", "lz4"]
+        format_choice, ok = QInputDialog.getItem(
             self,
-            "未実装",
-            f"圧縮機能は未実装です。\n選択されたファイル: {len(selected)}個"
+            "圧縮形式を選択",
+            f"{len(selected)}個のファイルを圧縮します。\n圧縮形式を選択してください:",
+            formats,
+            0,
+            False
         )
+
+        if not ok:
+            return
+
+        # Process files
+        success_count = 0
+        failed_files = []
+
+        for file_path in selected:
+            success, message = compress_bag(file_path, format_choice)
+            if success:
+                success_count += 1
+            else:
+                failed_files.append(f"{Path(file_path).name}: {message}")
+
+        # Show results
+        result_msg = f"圧縮完了: {success_count}/{len(selected)}個"
+        if failed_files:
+            result_msg += "\n\n失敗したファイル:\n" + "\n".join(failed_files[:5])
+            if len(failed_files) > 5:
+                result_msg += f"\n...他{len(failed_files) - 5}個"
+
+        QMessageBox.information(self, "圧縮結果", result_msg)
+        self._refresh()
 
     def _check_integrity(self):
         """Check integrity of selected files."""
@@ -358,11 +389,54 @@ class BrowsePage(QWidget):
             QMessageBox.information(self, "情報", "ファイルが選択されていません。")
             return
 
-        QMessageBox.information(
+        # Filter only files with integrity issues
+        files_to_repair = []
+        for file_path in selected:
+            if file_path in self.file_info:
+                is_valid = self.file_info[file_path].get("is_valid", "")
+                if is_valid == "NG" or "エラー" in str(is_valid):
+                    files_to_repair.append(file_path)
+
+        if not files_to_repair:
+            QMessageBox.information(
+                self,
+                "情報",
+                "選択されたファイルに修復が必要なものはありません。\n整合性チェックで「NG」と表示されたファイルのみ修復できます。"
+            )
+            return
+
+        # Confirm
+        reply = QMessageBox.question(
             self,
-            "未実装",
-            f"修復機能は未実装です。\n選択されたファイル: {len(selected)}個"
+            "修復の確認",
+            f"{len(files_to_repair)}個のファイルを修復します。\n\nバックアップが作成され、修復されたファイルは別名で保存されます。\n続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
+
+        if reply == QMessageBox.StandardButton.No:
+            return
+
+        # Process files
+        success_count = 0
+        failed_files = []
+
+        for file_path in files_to_repair:
+            success, message = repair_bag(file_path)
+            if success:
+                success_count += 1
+            else:
+                failed_files.append(f"{Path(file_path).name}: {message}")
+
+        # Show results
+        result_msg = f"修復完了: {success_count}/{len(files_to_repair)}個"
+        if failed_files:
+            result_msg += "\n\n失敗したファイル:\n" + "\n".join(failed_files[:5])
+            if len(failed_files) > 5:
+                result_msg += f"\n...他{len(failed_files) - 5}個"
+
+        QMessageBox.information(self, "修復結果", result_msg)
+        self._refresh()
 
     def _play_in_foxglove(self):
         """Play selected file in Foxglove Studio."""

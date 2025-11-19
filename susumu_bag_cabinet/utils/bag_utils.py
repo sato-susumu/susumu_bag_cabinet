@@ -9,6 +9,45 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 
+def detect_mcap_compression(mcap_path: str) -> str:
+    """
+    Detect compression format of an MCAP file by reading its header.
+
+    Args:
+        mcap_path: Path to the MCAP file
+
+    Returns:
+        Compression format string
+    """
+    try:
+        with open(mcap_path, 'rb') as f:
+            # Read first 1KB to check for compression markers
+            header = f.read(1024)
+
+            # Check for common compression signatures
+            # LZ4 magic number: 0x184D2204
+            if b'\x04\x22\x4D\x18' in header:
+                return "圧縮(LZ4)"
+
+            # Zstd magic number: 0xFD2FB528
+            if b'\x28\xB5\x2F\xFD' in header or b'zstd' in header.lower():
+                return "圧縮(Zstd)"
+
+            # Read more data to check chunk compression
+            f.seek(0)
+            data = f.read(8192)
+
+            # Look for compression field indicators in MCAP format
+            if b'lz4' in data.lower():
+                return "圧縮(LZ4)"
+            if b'zstd' in data.lower():
+                return "圧縮(Zstd)"
+
+        return "未圧縮"
+    except Exception:
+        return "未チェック"
+
+
 def get_bag_info(bag_path: str) -> Dict[str, Any]:
     """
     Get information about a bag file using ros2 bag info.
@@ -93,7 +132,7 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
                 except Exception:
                     result["start_time"] = time_str
 
-            # Check for compression info
+            # Check for compression info (ros2 bag info doesn't always show it)
             if 'compression' in output.lower():
                 if 'lz4' in output.lower():
                     result["compression"] = "圧縮(LZ4)"
@@ -101,8 +140,6 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
                     result["compression"] = "圧縮(Zstd)"
                 else:
                     result["compression"] = "未圧縮"
-            else:
-                result["compression"] = "未圧縮"
         else:
             result["is_valid"] = "NG"
 
@@ -112,6 +149,20 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
         result["is_valid"] = "ros2コマンド未検出"
     except Exception as e:
         result["is_valid"] = f"エラー: {str(e)}"
+
+    # If compression is still not determined and it's an MCAP file, check directly
+    if result["compression"] == "未チェック" and result["format"] == "MCAP":
+        # Find the actual MCAP file path
+        mcap_file = None
+        if path_obj.is_file() and bag_path.endswith('.mcap'):
+            mcap_file = bag_path
+        elif path_obj.is_dir():
+            mcap_files = list(path_obj.glob('*.mcap'))
+            if mcap_files:
+                mcap_file = str(mcap_files[0])
+
+        if mcap_file:
+            result["compression"] = detect_mcap_compression(mcap_file)
 
     return result
 
