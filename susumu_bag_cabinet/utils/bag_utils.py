@@ -42,12 +42,23 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
     elif bag_path.endswith('.db3'):
         result["format"] = "DB3"
     elif path_obj.is_dir():
-        if (path_obj / 'metadata.yaml').exists():
-            result["format"] = "ROS2"
-        elif list(path_obj.glob('*.db3')):
-            result["format"] = "DB3 (Dir)"
-        elif list(path_obj.glob('*.mcap')):
-            result["format"] = "MCAP (Dir)"
+        # Check what files are inside the directory
+        has_metadata = (path_obj / 'metadata.yaml').exists()
+        mcap_files = list(path_obj.glob('*.mcap'))
+        db3_files = list(path_obj.glob('*.db3'))
+
+        if has_metadata:
+            # ROS2 bag directory - check what format it contains
+            if mcap_files:
+                result["format"] = "MCAP"
+            elif db3_files:
+                result["format"] = "DB3"
+            else:
+                result["format"] = "MCAP"  # Default for ROS2 bags
+        elif db3_files:
+            result["format"] = "DB3"
+        elif mcap_files:
+            result["format"] = "MCAP"
 
     # Try to get metadata using ros2 bag info
     try:
