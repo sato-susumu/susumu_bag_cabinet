@@ -75,14 +75,14 @@ class RecordPage(QWidget):
         label_layout.addWidget(self.label_input, 1)
         settings_layout.addLayout(label_layout)
 
-        # Filename (will be shown when recording)
-        filename_layout = QHBoxLayout()
-        filename_layout.addWidget(QLabel("ファイル名:"))
-        self.filename_label = QLabel("-")
-        self.filename_label.setWordWrap(True)
-        self.filename_label.setStyleSheet("QLabel { color: #666; }")
-        filename_layout.addWidget(self.filename_label, 1)
-        settings_layout.addLayout(filename_layout)
+        # Save path (will be shown when recording)
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("保存先パス:"))
+        self.path_label = QLabel("-")
+        self.path_label.setWordWrap(True)
+        self.path_label.setStyleSheet("QLabel { color: #666; }")
+        path_layout.addWidget(self.path_label, 1)
+        settings_layout.addLayout(path_layout)
 
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
@@ -200,7 +200,9 @@ class RecordPage(QWidget):
             # Update UI
             self.status_label.setText("記録中")
             self.status_label.setStyleSheet("QLabel { color: red; }")
-            self.filename_label.setText(str(self.output_path))  # Show full file path
+            # Show folder path without .mcap extension
+            folder_path = str(self.output_path).replace('.mcap', '')
+            self.path_label.setText(folder_path)
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
             self.home_btn.setEnabled(False)
@@ -234,7 +236,7 @@ class RecordPage(QWidget):
         # Update UI
         self.status_label.setText("停止済み")
         self.status_label.setStyleSheet("QLabel { color: gray; }")
-        self.filename_label.setText("-")  # Reset filename
+        self.path_label.setText("-")  # Reset path
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.home_btn.setEnabled(True)
