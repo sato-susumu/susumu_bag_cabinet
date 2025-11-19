@@ -240,11 +240,8 @@ class RecordPage(QWidget):
         self.home_btn.setEnabled(True)
         self.label_input.setEnabled(True)
 
-        QMessageBox.information(
-            self,
-            "記録完了",
-            f"記録が完了しました。\n{self.output_path}"
-        )
+        # Show completion message with auto-close countdown
+        self._show_completion_dialog()
 
     def _update_recording_info(self):
         """Update elapsed time and file size during recording."""
@@ -307,6 +304,38 @@ class RecordPage(QWidget):
                 event.ignore()
         else:
             event.accept()
+
+    def _show_completion_dialog(self):
+        """Show completion dialog with auto-close countdown."""
+        # Create message box
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("記録完了")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+
+        # Initial message
+        countdown = 5
+        msg_box.setText(f"記録が完了しました。\n{self.output_path}\n\n({countdown}秒後に自動的に閉じます)")
+
+        # Create timer for countdown
+        countdown_timer = QTimer()
+
+        def update_countdown():
+            nonlocal countdown
+            countdown -= 1
+            if countdown > 0:
+                msg_box.setText(f"記録が完了しました。\n{self.output_path}\n\n({countdown}秒後に自動的に閉じます)")
+            else:
+                countdown_timer.stop()
+                msg_box.accept()
+
+        countdown_timer.timeout.connect(update_countdown)
+        countdown_timer.start(1000)  # Update every second
+
+        # Show dialog (blocks until closed or auto-closed)
+        msg_box.exec()
+
+        # Make sure timer is stopped
+        countdown_timer.stop()
 
     def refresh_config(self):
         """Refresh the display based on current config."""
