@@ -72,14 +72,13 @@ class RecordPage(QWidget):
         label_layout.addWidget(QLabel("ラベル (任意):"))
         self.label_input = QLineEdit()
         self.label_input.setPlaceholderText("例: 廊下テスト、屋外走行1")
-        self.label_input.textChanged.connect(self._update_filename_preview)
         label_layout.addWidget(self.label_input, 1)
         settings_layout.addLayout(label_layout)
 
-        # Filename preview
+        # Filename (will be shown when recording)
         filename_layout = QHBoxLayout()
         filename_layout.addWidget(QLabel("ファイル名:"))
-        self.filename_label = QLabel()
+        self.filename_label = QLabel("-")
         self.filename_label.setWordWrap(True)
         self.filename_label.setStyleSheet("QLabel { color: #666; }")
         filename_layout.addWidget(self.filename_label, 1)
@@ -148,21 +147,11 @@ class RecordPage(QWidget):
 
         # Initialize display
         self._update_folder_display()
-        self._update_filename_preview()
 
     def _update_folder_display(self):
         """Update the folder path display."""
         folder = self.config.get_bag_folder()
         self.folder_label.setText(folder)
-
-    def _update_filename_preview(self):
-        """Update the filename preview."""
-        label = self.label_input.text().strip()
-        robot_name = self.config.get_robot_name()
-        include_robot = self.config.get_filename_include_robot_name()
-
-        filename = generate_filename(label, robot_name, include_robot)
-        self.filename_label.setText(f"{filename}.mcap")
 
     def _start_recording(self):
         """Start recording."""
@@ -199,6 +188,7 @@ class RecordPage(QWidget):
             # Update UI
             self.status_label.setText("記録中")
             self.status_label.setStyleSheet("QLabel { color: red; }")
+            self.filename_label.setText(f"{filename}.mcap")  # Show actual filename
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
             self.home_btn.setEnabled(False)
@@ -232,6 +222,7 @@ class RecordPage(QWidget):
         # Update UI
         self.status_label.setText("停止済み")
         self.status_label.setStyleSheet("QLabel { color: gray; }")
+        self.filename_label.setText("-")  # Reset filename
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.home_btn.setEnabled(True)
