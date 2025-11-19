@@ -75,7 +75,7 @@ class SettingsPage(QWidget):
 
         # Include robot name checkbox
         self.include_robot_checkbox = QCheckBox("ファイル名にロボット名を含める")
-        self.include_robot_checkbox.setChecked(self.config.get_filename_include_robot_name())
+        self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         filename_layout.addWidget(self.include_robot_checkbox)
 
         # Preview
@@ -215,9 +215,20 @@ class SettingsPage(QWidget):
             )
             return
 
-        # Get the path to the main script
-        app_path = Path(__file__).parent.parent / "main.py"
-        python_exec = "python3"
+        # Get the application directory
+        app_dir = Path(__file__).parent.parent.parent
+
+        # Create shell script path
+        script_path = app_dir / "run_susumu_bag_cabinet.sh"
+
+        # Create shell script content
+        # Using bash -i ensures .bashrc is loaded, which sets up ROS2 environment
+        shell_script_content = f"""#!/bin/bash
+
+cd {app_dir}
+
+python3 -m susumu_bag_cabinet.main
+"""
 
         # Create .desktop file content
         desktop_file_content = f"""[Desktop Entry]
@@ -225,7 +236,7 @@ Version=1.0
 Type=Application
 Name=Susumu Bag Cabinet
 Comment=ROS2 Bag管理アプリケーション
-Exec={python_exec} -m susumu_bag_cabinet.main
+Exec=bash -i {script_path}
 Icon=folder
 Terminal=false
 Categories=Development;Utility;
@@ -234,11 +245,18 @@ Categories=Development;Utility;
         desktop_file_path = desktop_path / "susumu_bag_cabinet.desktop"
 
         try:
+            # Write shell script
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(shell_script_content)
+
+            # Make shell script executable
+            os.chmod(script_path, 0o755)
+
             # Write .desktop file
             with open(desktop_file_path, 'w', encoding='utf-8') as f:
                 f.write(desktop_file_content)
 
-            # Make it executable
+            # Make .desktop file executable
             os.chmod(desktop_file_path, 0o755)
 
             QMessageBox.information(
@@ -285,7 +303,7 @@ Categories=Development;Utility;
         # Reload settings from config
         self.folder_input.setText(self.config.get_bag_folder())
         self.robot_input.setText(self.config.get_robot_name())
-        self.include_robot_checkbox.setChecked(self.config.get_filename_include_robot_name())
+        self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
 
         self.home_clicked.emit()
@@ -294,7 +312,7 @@ Categories=Development;Utility;
         """Refresh UI from current config."""
         self.folder_input.setText(self.config.get_bag_folder())
         self.robot_input.setText(self.config.get_robot_name())
-        self.include_robot_checkbox.setChecked(self.config.get_filename_include_robot_name())
+        self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
         self._update_preview()
 
