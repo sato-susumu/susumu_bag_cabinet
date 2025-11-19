@@ -597,14 +597,23 @@ class BrowsePage(QWidget):
                 if mcap_files:
                     mcap_file_to_open = str(mcap_files[0])
                 else:
-                    # No .mcap file found - show helpful error
-                    all_files = list(path_obj.glob('*'))
-                    file_list = ', '.join([f.name for f in all_files[:5]])
-                    raise FileNotFoundError(
-                        f"ディレクトリ内に開けるMCAPファイルが見つかりません。\n"
-                        f"ディレクトリ: {path_obj}\n"
-                        f"見つかったファイル: {file_list}"
-                    )
+                    # No .mcap file found - check if compressed files exist
+                    compressed_files = list(path_obj.glob('*.mcap.zstd')) + list(path_obj.glob('*.mcap.lz4'))
+                    if compressed_files:
+                        raise FileNotFoundError(
+                            f"このbagファイルは圧縮されているため、Foxgloveで直接開けません。\n"
+                            f"「修復を試みる」機能で展開してから再度お試しください。\n\n"
+                            f"圧縮ファイル: {compressed_files[0].name}"
+                        )
+                    else:
+                        # No .mcap file found - show helpful error
+                        all_files = list(path_obj.glob('*'))
+                        file_list = ', '.join([f.name for f in all_files[:5]])
+                        raise FileNotFoundError(
+                            f"ディレクトリ内に開けるMCAPファイルが見つかりません。\n"
+                            f"ディレクトリ: {path_obj}\n"
+                            f"見つかったファイル: {file_list}"
+                        )
             else:
                 raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
 
