@@ -330,20 +330,19 @@ class BrowsePage(QWidget):
             QMessageBox.information(self, "情報", "ファイルが選択されていません。")
             return
 
-        # Ask user to confirm and select compression format
-        from PySide6.QtWidgets import QInputDialog
-        formats = ["zstd", "lz4"]
-        format_choice, ok = QInputDialog.getItem(
+        # Ask user to confirm
+        reply = QMessageBox.question(
             self,
-            "圧縮形式を選択",
-            f"{len(selected)}個のファイルを圧縮します。\n圧縮形式を選択してください:",
-            formats,
-            0,
-            False
+            "圧縮の確認",
+            f"{len(selected)}個のファイルをZstd形式で圧縮します。\n\n元のファイルは保持され、圧縮されたファイルは別名で保存されます。\n続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
 
-        if not ok:
+        if not reply == QMessageBox.StandardButton.Yes:
             return
+
+        format_choice = "zstd"  # Use zstd as it's available
 
         # Process files
         success_count = 0
