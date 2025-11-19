@@ -152,6 +152,9 @@ class BrowsePage(QWidget):
         # Update folder display
         self._update_folder_display()
 
+        # Initially disable file-operation buttons
+        self._update_button_states()
+
     def _update_folder_display(self):
         """Update the folder path display."""
         folder = self.config.get_bag_folder()
@@ -231,6 +234,7 @@ class BrowsePage(QWidget):
         for row, file_path in enumerate(self.bag_files):
             # Checkbox
             checkbox = QCheckBox()
+            checkbox.stateChanged.connect(self._update_button_states)
             checkbox_widget = QWidget()
             checkbox_layout = QHBoxLayout(checkbox_widget)
             checkbox_layout.addWidget(checkbox)
@@ -256,6 +260,9 @@ class BrowsePage(QWidget):
 
             # Integrity (will be updated)
             self.table.setItem(row, 6, QTableWidgetItem("未チェック"))
+
+        # Update button states after populating table
+        self._update_button_states()
 
     def _update_table_row(self, path, info):
         """Update a table row with file information.
@@ -326,6 +333,7 @@ class BrowsePage(QWidget):
                 checkbox = checkbox_widget.findChild(QCheckBox)
                 if checkbox:
                     checkbox.setChecked(True)
+        self._update_button_states()
 
     def _deselect_all(self):
         """Deselect all checkboxes."""
@@ -335,6 +343,7 @@ class BrowsePage(QWidget):
                 checkbox = checkbox_widget.findChild(QCheckBox)
                 if checkbox:
                     checkbox.setChecked(False)
+        self._update_button_states()
 
     def _compress_selected(self):
         """Compress selected bag files."""
@@ -634,3 +643,16 @@ class BrowsePage(QWidget):
     def refresh_config(self):
         """Refresh based on current config."""
         self._update_folder_display()
+
+    def _update_button_states(self):
+        """Update button states based on file selection."""
+        selected_files = self._get_selected_files()
+        has_selection = len(selected_files) > 0
+
+        # Enable/disable buttons based on selection
+        self.compress_btn.setEnabled(has_selection)
+        self.check_btn.setEnabled(has_selection)
+        self.repair_btn.setEnabled(has_selection)
+        self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
+        self.delete_btn.setEnabled(has_selection)
+        self.deselect_all_btn.setEnabled(has_selection)
