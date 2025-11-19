@@ -409,15 +409,24 @@ class BrowsePage(QWidget):
         from PySide6.QtWidgets import QProgressDialog
         from PySide6.QtCore import QCoreApplication
 
-        progress = QProgressDialog(self)
+        progress = QProgressDialog(
+            "圧縮処理を開始しています...",
+            "キャンセル",
+            0,
+            len(selected),
+            self
+        )
         progress.setWindowTitle("圧縮中")
-        progress.setLabelText("圧縮処理を開始しています...")
-        progress.setCancelButtonText("キャンセル")
-        progress.setRange(0, len(selected))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
+        progress.setAutoReset(False)
+        progress.setAutoClose(False)
+        progress.setMinimumWidth(400)
         progress.setValue(0)
         progress.show()
+        QCoreApplication.processEvents()
+        import time
+        time.sleep(0.1)
         QCoreApplication.processEvents()
 
         # Process files
@@ -507,16 +516,25 @@ class BrowsePage(QWidget):
         # Create progress dialog
         from PySide6.QtWidgets import QProgressDialog
         from PySide6.QtCore import QCoreApplication
+        import time
 
-        progress = QProgressDialog(self)
+        progress = QProgressDialog(
+            "修復処理を開始しています...",
+            "キャンセル",
+            0,
+            len(files_to_repair),
+            self
+        )
         progress.setWindowTitle("修復中")
-        progress.setLabelText("修復処理を開始しています...")
-        progress.setCancelButtonText("キャンセル")
-        progress.setRange(0, len(files_to_repair))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
+        progress.setAutoReset(False)
+        progress.setAutoClose(False)
+        progress.setMinimumWidth(400)
         progress.setValue(0)
         progress.show()
+        QCoreApplication.processEvents()
+        time.sleep(0.1)
         QCoreApplication.processEvents()
 
         # Process files
@@ -611,16 +629,25 @@ class BrowsePage(QWidget):
         # Create progress dialog
         from PySide6.QtWidgets import QProgressDialog
         from PySide6.QtCore import QCoreApplication
+        import time
 
-        progress = QProgressDialog(self)
+        progress = QProgressDialog(
+            "削除処理を開始しています...",
+            "キャンセル",
+            0,
+            len(selected),
+            self
+        )
         progress.setWindowTitle("削除中")
-        progress.setLabelText("削除処理を開始しています...")
-        progress.setCancelButtonText("キャンセル")
-        progress.setRange(0, len(selected))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
+        progress.setAutoReset(False)
+        progress.setAutoClose(False)
+        progress.setMinimumWidth(400)
         progress.setValue(0)
         progress.show()
+        QCoreApplication.processEvents()
+        time.sleep(0.1)
         QCoreApplication.processEvents()
 
         # Delete files
