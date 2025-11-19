@@ -208,11 +208,8 @@ class SettingsPage(QWidget):
         # Emit signal
         self.settings_changed.emit()
 
-        QMessageBox.information(
-            self,
-            "保存完了",
-            "設定を保存しました。"
-        )
+        # Show completion message with auto-close countdown
+        self._show_completion_dialog()
 
         self.home_clicked.emit()
 
@@ -233,3 +230,37 @@ class SettingsPage(QWidget):
         self.include_robot_checkbox.setChecked(self.config.get_filename_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
         self._update_preview()
+
+    def _show_completion_dialog(self):
+        """Show completion dialog with auto-close countdown."""
+        from PySide6.QtCore import QTimer
+
+        # Create message box
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("保存完了")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+
+        # Initial message
+        countdown = 3
+        msg_box.setText(f"設定を保存しました。\n\n({countdown}秒後に自動的に閉じます)")
+
+        # Create timer for countdown
+        countdown_timer = QTimer()
+
+        def update_countdown():
+            nonlocal countdown
+            countdown -= 1
+            if countdown > 0:
+                msg_box.setText(f"設定を保存しました。\n\n({countdown}秒後に自動的に閉じます)")
+            else:
+                countdown_timer.stop()
+                msg_box.accept()
+
+        countdown_timer.timeout.connect(update_countdown)
+        countdown_timer.start(1000)  # Update every second
+
+        # Show dialog (blocks until closed or auto-closed)
+        msg_box.exec()
+
+        # Make sure timer is stopped
+        countdown_timer.stop()

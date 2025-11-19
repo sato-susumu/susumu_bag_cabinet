@@ -313,7 +313,7 @@ class RecordPage(QWidget):
         msg_box.setIcon(QMessageBox.Icon.Information)
 
         # Initial message
-        countdown = 5
+        countdown = 3
         msg_box.setText(f"記録が完了しました。\n{self.output_path}\n\n({countdown}秒後に自動的に閉じます)")
 
         # Create timer for countdown
