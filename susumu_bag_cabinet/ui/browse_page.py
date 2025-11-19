@@ -344,16 +344,45 @@ class BrowsePage(QWidget):
 
         format_choice = "zstd"  # Use zstd as it's available
 
+        # Create progress dialog
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog(
+            "圧縮処理を実行中...",
+            "キャンセル",
+            0,
+            len(selected),
+            self
+        )
+        progress.setWindowTitle("圧縮中")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
         # Process files
         success_count = 0
         failed_files = []
 
-        for file_path in selected:
+        for i, file_path in enumerate(selected):
+            if progress.wasCanceled():
+                break
+
+            # Update progress
+            filename = Path(file_path).name
+            progress.setLabelText(f"圧縮中... ({i+1}/{len(selected)})\n{filename}")
+            progress.setValue(i)
+
+            # Force UI update
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+
             success, message = compress_bag(file_path, format_choice)
             if success:
                 success_count += 1
             else:
                 failed_files.append(f"{Path(file_path).name}: {message}")
+
+        progress.setValue(len(selected))
+        progress.close()
 
         # Show results
         result_msg = f"圧縮完了: {success_count}/{len(selected)}個"
@@ -416,16 +445,45 @@ class BrowsePage(QWidget):
         if reply == QMessageBox.StandardButton.No:
             return
 
+        # Create progress dialog
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog(
+            "修復処理を実行中...",
+            "キャンセル",
+            0,
+            len(files_to_repair),
+            self
+        )
+        progress.setWindowTitle("修復中")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
         # Process files
         success_count = 0
         failed_files = []
 
-        for file_path in files_to_repair:
+        for i, file_path in enumerate(files_to_repair):
+            if progress.wasCanceled():
+                break
+
+            # Update progress
+            filename = Path(file_path).name
+            progress.setLabelText(f"修復中... ({i+1}/{len(files_to_repair)})\n{filename}")
+            progress.setValue(i)
+
+            # Force UI update
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+
             success, message = repair_bag(file_path)
             if success:
                 success_count += 1
             else:
                 failed_files.append(f"{Path(file_path).name}: {message}")
+
+        progress.setValue(len(files_to_repair))
+        progress.close()
 
         # Show results
         result_msg = f"修復完了: {success_count}/{len(files_to_repair)}個"
