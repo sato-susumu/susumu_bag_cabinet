@@ -126,6 +126,12 @@ class RecordPage(QWidget):
         btn_font.setPointSize(14)
         self.start_btn.setFont(btn_font)
         self.start_btn.clicked.connect(self._start_recording)
+        self.start_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout.addWidget(self.start_btn)
 
         self.stop_btn = QPushButton("記録停止")
@@ -133,6 +139,12 @@ class RecordPage(QWidget):
         self.stop_btn.setFont(btn_font)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop_recording)
+        self.stop_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout.addWidget(self.stop_btn)
 
         layout.addLayout(button_layout)
