@@ -586,15 +586,25 @@ class BrowsePage(QWidget):
             # If it's a .mcap file, use it directly
             if path_obj.is_file() and path_obj.suffix == '.mcap':
                 mcap_file_to_open = str(path_obj)
-            # If it's a directory (old bag format), check for .mcap or .db3 inside
+            # If it's a directory, check for .mcap files inside
             elif path_obj.is_dir():
-                # Look for .mcap file in directory
+                # Look for .mcap file in directory (including nested patterns like *_0.mcap)
                 mcap_files = list(path_obj.glob('*.mcap'))
+                # Also look for *_0.mcap pattern (common in ROS2 bags)
+                if not mcap_files:
+                    mcap_files = list(path_obj.glob('*_0.mcap'))
+
                 if mcap_files:
                     mcap_file_to_open = str(mcap_files[0])
                 else:
-                    # No .mcap file found
-                    raise FileNotFoundError(f"ディレクトリ内にMCAPファイルが見つかりません: {path_obj}")
+                    # No .mcap file found - show helpful error
+                    all_files = list(path_obj.glob('*'))
+                    file_list = ', '.join([f.name for f in all_files[:5]])
+                    raise FileNotFoundError(
+                        f"ディレクトリ内に開けるMCAPファイルが見つかりません。\n"
+                        f"ディレクトリ: {path_obj}\n"
+                        f"見つかったファイル: {file_list}"
+                    )
             else:
                 raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
 
