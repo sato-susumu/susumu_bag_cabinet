@@ -1,0 +1,414 @@
+"""
+Browse page UI for Susumu Bag Cabinet.
+"""
+
+import subprocess
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
+    QProgressBar, QCheckBox
+)
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QFont
+from susumu_bag_cabinet.utils.config import Config
+from susumu_bag_cabinet.utils.bag_utils import format_size
+from susumu_bag_cabinet.workers.bag_scanner import BagScanner
+
+
+class BrowsePage(QWidget):
+    """Page for browsing bag files."""
+
+    # Signals
+    home_clicked = Signal()
+
+    def __init__(self, config: Config):
+        """Initialize the browse page.
+
+        Args:
+            config: Application configuration
+        """
+        super().__init__()
+        self.config = config
+        self.scanner = None
+        self.bag_files = []
+        self.file_info = {}  # path -> info dict
+
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Set up the user interface."""
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title and refresh
+        header_layout = QHBoxLayout()
+        title = QLabel("記録をみる")
+        title_font = QFont()
+        title_font.setPointSize(20)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        refresh_btn = QPushButton("更新")
+        refresh_btn.clicked.connect(self._refresh)
+        header_layout.addWidget(refresh_btn)
+
+        layout.addLayout(header_layout)
+
+        # Folder path
+        self.folder_label = QLabel()
+        self.folder_label.setStyleSheet("QLabel { color: #666; }")
+        layout.addWidget(self.folder_label)
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        # Table
+        self.table = QTableWidget()
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels([
+            "選択", "ファイル名", "サイズ", "記録開始日時",
+            "形式", "圧縮状態", "整合性"
+        ])
+
+        # Set column widths
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setAlternatingRowColors(True)
+
+        layout.addWidget(self.table)
+
+        # Operation buttons
+        button_layout1 = QHBoxLayout()
+
+        self.select_all_btn = QPushButton("全選択")
+        self.select_all_btn.clicked.connect(self._select_all)
+        button_layout1.addWidget(self.select_all_btn)
+
+        self.deselect_all_btn = QPushButton("選択解除")
+        self.deselect_all_btn.clicked.connect(self._deselect_all)
+        button_layout1.addWidget(self.deselect_all_btn)
+
+        button_layout1.addStretch()
+
+        layout.addLayout(button_layout1)
+
+        button_layout2 = QHBoxLayout()
+
+        self.compress_btn = QPushButton("圧縮する")
+        self.compress_btn.clicked.connect(self._compress_selected)
+        button_layout2.addWidget(self.compress_btn)
+
+        self.check_btn = QPushButton("整合性チェック")
+        self.check_btn.clicked.connect(self._check_integrity)
+        button_layout2.addWidget(self.check_btn)
+
+        self.repair_btn = QPushButton("修復を試みる")
+        self.repair_btn.clicked.connect(self._repair_selected)
+        button_layout2.addWidget(self.repair_btn)
+
+        self.foxglove_btn = QPushButton("Foxgloveで再生")
+        self.foxglove_btn.clicked.connect(self._play_in_foxglove)
+        button_layout2.addWidget(self.foxglove_btn)
+
+        layout.addLayout(button_layout2)
+
+        # Home button
+        self.home_btn = QPushButton("ホームへ戻る")
+        self.home_btn.setMinimumHeight(40)
+        self.home_btn.clicked.connect(self.home_clicked)
+        layout.addWidget(self.home_btn)
+
+        self.setLayout(layout)
+
+        # Update folder display
+        self._update_folder_display()
+
+    def _update_folder_display(self):
+        """Update the folder path display."""
+        folder = self.config.get_bag_folder()
+        self.folder_label.setText(f"フォルダ: {folder}")
+
+    def start_scan(self):
+        """Start scanning for bag files."""
+        folder = self.config.get_bag_folder()
+
+        # Stop existing scanner if any
+        if self.scanner:
+            self.scanner.stop()
+
+        # Create new scanner
+        self.scanner = BagScanner(folder)
+        self.scanner.scan_started.connect(self._on_scan_started)
+        self.scanner.scan_completed.connect(self._on_scan_completed)
+        self.scanner.file_info_updated.connect(self._on_file_info_updated)
+        self.scanner.progress.connect(self._on_progress)
+        self.scanner.error.connect(self._on_error)
+
+        self.scanner.start()
+
+    def _on_scan_started(self):
+        """Handle scan start."""
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setMaximum(0)  # Indeterminate
+
+    def _on_scan_completed(self, file_paths):
+        """Handle scan completion.
+
+        Args:
+            file_paths: List of bag file paths found
+        """
+        self.bag_files = file_paths
+        self._populate_table()
+
+        if file_paths:
+            self.progress_bar.setMaximum(len(file_paths))
+            self.progress_bar.setValue(0)
+        else:
+            self.progress_bar.setVisible(False)
+
+    def _on_file_info_updated(self, path, info):
+        """Handle file info update.
+
+        Args:
+            path: File path
+            info: Information dictionary
+        """
+        self.file_info[path] = info
+        self._update_table_row(path, info)
+
+    def _on_progress(self, current, total):
+        """Handle progress update.
+
+        Args:
+            current: Current progress
+            total: Total items
+        """
+        self.progress_bar.setValue(current)
+        if current >= total:
+            self.progress_bar.setVisible(False)
+
+    def _on_error(self, error_msg):
+        """Handle error.
+
+        Args:
+            error_msg: Error message
+        """
+        QMessageBox.warning(self, "エラー", f"スキャン中にエラーが発生しました:\n{error_msg}")
+
+    def _populate_table(self):
+        """Populate the table with bag files."""
+        self.table.setRowCount(len(self.bag_files))
+
+        for row, file_path in enumerate(self.bag_files):
+            # Checkbox
+            checkbox = QCheckBox()
+            checkbox_widget = QWidget()
+            checkbox_layout = QHBoxLayout(checkbox_widget)
+            checkbox_layout.addWidget(checkbox)
+            checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            self.table.setCellWidget(row, 0, checkbox_widget)
+
+            # Filename
+            filename = Path(file_path).name
+            self.table.setItem(row, 1, QTableWidgetItem(filename))
+
+            # Size (will be updated)
+            self.table.setItem(row, 2, QTableWidgetItem("-"))
+
+            # Start time (will be updated)
+            self.table.setItem(row, 3, QTableWidgetItem("読込中..."))
+
+            # Format (will be updated)
+            self.table.setItem(row, 4, QTableWidgetItem("-"))
+
+            # Compression (will be updated)
+            self.table.setItem(row, 5, QTableWidgetItem("未チェック"))
+
+            # Integrity (will be updated)
+            self.table.setItem(row, 6, QTableWidgetItem("未チェック"))
+
+    def _update_table_row(self, path, info):
+        """Update a table row with file information.
+
+        Args:
+            path: File path
+            info: Information dictionary
+        """
+        # Find the row for this file
+        row = -1
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 1)
+            if item and Path(path).name == item.text():
+                row = i
+                break
+
+        if row == -1:
+            return
+
+        # Update size
+        size_str = format_size(info.get("size", 0))
+        self.table.setItem(row, 2, QTableWidgetItem(size_str))
+
+        # Update start time
+        start_time = info.get("start_time")
+        if start_time:
+            if isinstance(start_time, str):
+                time_str = start_time
+            else:
+                time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            time_str = "不明"
+        self.table.setItem(row, 3, QTableWidgetItem(time_str))
+
+        # Update format
+        format_str = info.get("format", "Unknown")
+        self.table.setItem(row, 4, QTableWidgetItem(format_str))
+
+        # Update compression
+        compression_str = info.get("compression", "未チェック")
+        self.table.setItem(row, 5, QTableWidgetItem(compression_str))
+
+        # Update integrity
+        is_valid = info.get("is_valid", "未チェック")
+        self.table.setItem(row, 6, QTableWidgetItem(str(is_valid)))
+
+    def _get_selected_files(self):
+        """Get list of selected file paths."""
+        selected = []
+        for row in range(self.table.rowCount()):
+            checkbox_widget = self.table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox and checkbox.isChecked():
+                    filename = self.table.item(row, 1).text()
+                    # Find full path
+                    for file_path in self.bag_files:
+                        if Path(file_path).name == filename:
+                            selected.append(file_path)
+                            break
+        return selected
+
+    def _select_all(self):
+        """Select all checkboxes."""
+        for row in range(self.table.rowCount()):
+            checkbox_widget = self.table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox:
+                    checkbox.setChecked(True)
+
+    def _deselect_all(self):
+        """Deselect all checkboxes."""
+        for row in range(self.table.rowCount()):
+            checkbox_widget = self.table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox:
+                    checkbox.setChecked(False)
+
+    def _compress_selected(self):
+        """Compress selected bag files."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        QMessageBox.information(
+            self,
+            "未実装",
+            f"圧縮機能は未実装です。\n選択されたファイル: {len(selected)}個"
+        )
+
+    def _check_integrity(self):
+        """Check integrity of selected files."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        # Re-scan selected files
+        QMessageBox.information(
+            self,
+            "情報",
+            f"整合性チェックを開始します。\n選択されたファイル: {len(selected)}個"
+        )
+        # The info is already being checked during scan
+        self._refresh()
+
+    def _repair_selected(self):
+        """Repair selected bag files."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        QMessageBox.information(
+            self,
+            "未実装",
+            f"修復機能は未実装です。\n選択されたファイル: {len(selected)}個"
+        )
+
+    def _play_in_foxglove(self):
+        """Play selected file in Foxglove Studio."""
+        selected = self._get_selected_files()
+
+        if len(selected) == 0:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        if len(selected) > 1:
+            QMessageBox.warning(
+                self,
+                "警告",
+                "ファイルを1つだけ選択してください。"
+            )
+            return
+
+        file_path = selected[0]
+        command = self.config.get_foxglove_command()
+
+        try:
+            subprocess.Popen([command, file_path])
+            QMessageBox.information(
+                self,
+                "起動",
+                f"Foxglove Studioでファイルを開きました。\n{Path(file_path).name}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"Foxglove Studioの起動に失敗しました:\n{str(e)}"
+            )
+
+    def _refresh(self):
+        """Refresh the file list."""
+        self._update_folder_display()
+        self.file_info.clear()
+        self.start_scan()
+
+    def showEvent(self, event):
+        """Handle show event."""
+        super().showEvent(event)
+        # Refresh when page is shown
+        self._refresh()
+
+    def refresh_config(self):
+        """Refresh based on current config."""
+        self._update_folder_display()
