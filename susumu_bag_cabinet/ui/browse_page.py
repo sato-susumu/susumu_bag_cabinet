@@ -368,17 +368,18 @@ class BrowsePage(QWidget):
 
         # Create progress dialog
         from PySide6.QtWidgets import QProgressDialog
-        progress = QProgressDialog(
-            "圧縮処理を実行中...",
-            "キャンセル",
-            0,
-            len(selected),
-            self
-        )
+        from PySide6.QtCore import QCoreApplication
+
+        progress = QProgressDialog(self)
         progress.setWindowTitle("圧縮中")
+        progress.setLabelText("圧縮処理を開始しています...")
+        progress.setCancelButtonText("キャンセル")
+        progress.setRange(0, len(selected))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        progress.show()
+        QCoreApplication.processEvents()
 
         # Process files
         success_count = 0
@@ -392,9 +393,6 @@ class BrowsePage(QWidget):
             filename = Path(file_path).name
             progress.setLabelText(f"圧縮中... ({i+1}/{len(selected)})\n{filename}")
             progress.setValue(i)
-
-            # Force UI update
-            from PySide6.QtCore import QCoreApplication
             QCoreApplication.processEvents()
 
             success, message = compress_bag(file_path, format_choice)
@@ -469,17 +467,18 @@ class BrowsePage(QWidget):
 
         # Create progress dialog
         from PySide6.QtWidgets import QProgressDialog
-        progress = QProgressDialog(
-            "修復処理を実行中...",
-            "キャンセル",
-            0,
-            len(files_to_repair),
-            self
-        )
+        from PySide6.QtCore import QCoreApplication
+
+        progress = QProgressDialog(self)
         progress.setWindowTitle("修復中")
+        progress.setLabelText("修復処理を開始しています...")
+        progress.setCancelButtonText("キャンセル")
+        progress.setRange(0, len(files_to_repair))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        progress.show()
+        QCoreApplication.processEvents()
 
         # Process files
         success_count = 0
@@ -493,9 +492,6 @@ class BrowsePage(QWidget):
             filename = Path(file_path).name
             progress.setLabelText(f"修復中... ({i+1}/{len(files_to_repair)})\n{filename}")
             progress.setValue(i)
-
-            # Force UI update
-            from PySide6.QtCore import QCoreApplication
             QCoreApplication.processEvents()
 
             success, message = repair_bag(file_path)
@@ -575,17 +571,18 @@ class BrowsePage(QWidget):
 
         # Create progress dialog
         from PySide6.QtWidgets import QProgressDialog
-        progress = QProgressDialog(
-            "削除処理を実行中...",
-            "キャンセル",
-            0,
-            len(selected),
-            self
-        )
+        from PySide6.QtCore import QCoreApplication
+
+        progress = QProgressDialog(self)
         progress.setWindowTitle("削除中")
+        progress.setLabelText("削除処理を開始しています...")
+        progress.setCancelButtonText("キャンセル")
+        progress.setRange(0, len(selected))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        progress.show()
+        QCoreApplication.processEvents()
 
         # Delete files
         success_count = 0
@@ -599,9 +596,6 @@ class BrowsePage(QWidget):
             filename = Path(file_path).name
             progress.setLabelText(f"削除中... ({i+1}/{len(selected)})\n{filename}")
             progress.setValue(i)
-
-            # Force UI update
-            from PySide6.QtCore import QCoreApplication
             QCoreApplication.processEvents()
 
             try:
