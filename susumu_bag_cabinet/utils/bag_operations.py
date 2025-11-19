@@ -197,9 +197,26 @@ def compress_bag(bag_path: str, compression: str = "zstd",
 
             if result.returncode == 0:
                 if progress_callback:
-                    progress_callback("圧縮が完了しました")
+                    progress_callback("圧縮が完了しました。ファイルを置き換えています...")
 
-                return True, f"圧縮されたファイルを作成しました: {output_path}"
+                # Rename original file to backup
+                import shutil
+                bag_path_obj = Path(bag_path)
+                if bag_path_obj.is_file():
+                    backup_path = bag_path_obj.parent / f"{bag_path_obj.stem}_uncompressed{bag_path_obj.suffix}"
+                else:
+                    backup_path = Path(str(bag_path) + "_uncompressed")
+
+                # Move original to backup
+                shutil.move(str(bag_path), str(backup_path))
+
+                # Rename compressed file to original name
+                shutil.move(str(output_path), str(bag_path))
+
+                if progress_callback:
+                    progress_callback("完了しました")
+
+                return True, f"圧縮完了:\n元ファイル → {backup_path.name}\n圧縮版 → {bag_path_obj.name}"
             else:
                 error_msg = result.stderr if result.stderr else result.stdout
                 return False, f"圧縮に失敗しました:\n{error_msg}"
