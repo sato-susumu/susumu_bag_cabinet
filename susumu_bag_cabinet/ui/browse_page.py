@@ -90,6 +90,7 @@ class BrowsePage(QWidget):
 
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
+        self.table.cellClicked.connect(self._on_table_cell_clicked)
 
         layout.addWidget(self.table)
 
@@ -363,6 +364,15 @@ class BrowsePage(QWidget):
                             selected.append(file_path)
                             break
         return selected
+
+    def _on_table_cell_clicked(self, row, column):
+        """Handle table cell click to toggle checkbox."""
+        checkbox_widget = self.table.cellWidget(row, 0)
+        if checkbox_widget:
+            checkbox = checkbox_widget.findChild(QCheckBox)
+            if checkbox:
+                # Toggle checkbox state
+                checkbox.setChecked(not checkbox.isChecked())
 
     def _select_all(self):
         """Select all checkboxes."""
