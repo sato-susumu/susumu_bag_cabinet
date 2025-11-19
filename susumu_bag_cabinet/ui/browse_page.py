@@ -102,6 +102,12 @@ class BrowsePage(QWidget):
 
         self.deselect_all_btn = QPushButton("選択解除")
         self.deselect_all_btn.clicked.connect(self._deselect_all)
+        self.deselect_all_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout1.addWidget(self.deselect_all_btn)
 
         button_layout1.addStretch()
@@ -112,18 +118,42 @@ class BrowsePage(QWidget):
 
         self.compress_btn = QPushButton("圧縮する")
         self.compress_btn.clicked.connect(self._compress_selected)
+        self.compress_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout2.addWidget(self.compress_btn)
 
         self.check_btn = QPushButton("整合性チェック")
         self.check_btn.clicked.connect(self._check_integrity)
+        self.check_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout2.addWidget(self.check_btn)
 
         self.repair_btn = QPushButton("修復を試みる")
         self.repair_btn.clicked.connect(self._repair_selected)
+        self.repair_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout2.addWidget(self.repair_btn)
 
         self.foxglove_btn = QPushButton("Foxgloveで再生")
         self.foxglove_btn.clicked.connect(self._play_in_foxglove)
+        self.foxglove_btn.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         button_layout2.addWidget(self.foxglove_btn)
 
         layout.addLayout(button_layout2)
@@ -133,7 +163,16 @@ class BrowsePage(QWidget):
         button_layout3.addStretch()
 
         self.delete_btn = QPushButton("選択したファイルを削除")
-        self.delete_btn.setStyleSheet("QPushButton { background-color: #ff6b6b; color: white; }")
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ff6b6b;
+                color: white;
+            }
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
         self.delete_btn.setMinimumHeight(40)
         self.delete_btn.clicked.connect(self._delete_selected)
         button_layout3.addWidget(self.delete_btn)
