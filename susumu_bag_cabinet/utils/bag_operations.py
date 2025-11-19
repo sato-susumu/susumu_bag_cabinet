@@ -49,16 +49,41 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
 
             # Try to read and rewrite the bag
             # This will skip corrupted messages
+            import tempfile
+            import yaml
+
             output_path = str(path_obj) + "_repaired"
 
-            cmd = [
-                'ros2', 'bag', 'convert',
-                '-i', bag_path,
-                '-o', output_path,
-                '--output-options', 'storage_id=mcap'
-            ]
+            # Create YAML config
+            config = {
+                'output_bags': [
+                    {
+                        'uri': output_path,
+                        'storage_id': 'mcap',
+                        'compression_format': '',  # No compression for repaired bags
+                        'compression_mode': 'none'
+                    }
+                ]
+            }
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                yaml.dump(config, f)
+                config_file = f.name
 
             try:
+                # Detect input storage
+                input_storage = 'mcap'
+                if Path(bag_path).is_dir() and list(Path(bag_path).glob('*.db3')):
+                    input_storage = 'sqlite3'
+                elif bag_path.endswith('.db3'):
+                    input_storage = 'sqlite3'
+
+                cmd = [
+                    'ros2', 'bag', 'convert',
+                    '-i', bag_path, input_storage,
+                    '-o', config_file
+                ]
+
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -72,10 +97,16 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
 
                     return True, f"修復されたファイルを作成しました: {output_path}\nバックアップ: {backup_path}"
                 else:
-                    return False, f"修復に失敗しました: {result.stderr}"
+                    error_msg = result.stderr if result.stderr else result.stdout
+                    return False, f"修復に失敗しました:\n{error_msg}"
 
             except subprocess.TimeoutExpired:
                 return False, "修復がタイムアウトしました（ファイルが大きすぎる可能性があります）"
+            finally:
+                try:
+                    Path(config_file).unlink()
+                except:
+                    pass
 
         # For DB3 bags
         elif path_obj.is_dir() and list(path_obj.glob('*.db3')):
@@ -105,35 +136,83 @@ def compress_bag(bag_path: str, compression: str = "zstd",
     Returns:
         Tuple of (success: bool, message: str)
     """
+    import tempfile
+    import yaml
+
     try:
         if progress_callback:
             progress_callback("圧縮を開始しています...")
 
-        output_path = str(Path(bag_path).with_suffix('')) + f"_compressed_{compression}"
+        # Get output path
+        bag_name = Path(bag_path).stem if Path(bag_path).is_file() else Path(bag_path).name
+        output_dir = Path(bag_path).parent
+        output_path = output_dir / f"{bag_name}_compressed_{compression}"
 
-        cmd = [
-            'ros2', 'bag', 'convert',
-            '-i', bag_path,
-            '-o', output_path,
-            '--output-options', f'storage_id=mcap,compression_format={compression},compression_mode=file'
-        ]
+        # Create YAML config file for ros2 bag convert
+        config = {
+            'output_bags': [
+                {
+                    'uri': str(output_path),
+                    'storage_id': 'mcap',
+                    'compression_format': compression,
+                    'compression_mode': 'file'
+                }
+            ]
+        }
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=600  # 10 minutes timeout
-        )
+        # Write config to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(config, f)
+            config_file = f.name
 
-        if result.returncode == 0:
-            if progress_callback:
-                progress_callback("圧縮が完了しました")
+        try:
+            # Detect input storage format
+            input_storage = 'mcap'  # Default
+            if Path(bag_path).is_dir():
+                if list(Path(bag_path).glob('*.db3')):
+                    input_storage = 'sqlite3'
+                elif (Path(bag_path) / 'metadata.yaml').exists():
+                    # Check what storage is used in the bag directory
+                    mcap_files = list(Path(bag_path).glob('*.mcap'))
+                    db3_files = list(Path(bag_path).glob('*.db3'))
+                    if mcap_files:
+                        input_storage = 'mcap'
+                    elif db3_files:
+                        input_storage = 'sqlite3'
+            elif bag_path.endswith('.db3'):
+                input_storage = 'sqlite3'
 
-            return True, f"圧縮されたファイルを作成しました: {output_path}"
-        else:
-            return False, f"圧縮に失敗しました: {result.stderr}"
+            cmd = [
+                'ros2', 'bag', 'convert',
+                '-i', bag_path, input_storage,
+                '-o', config_file
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minutes timeout
+            )
+
+            if result.returncode == 0:
+                if progress_callback:
+                    progress_callback("圧縮が完了しました")
+
+                return True, f"圧縮されたファイルを作成しました: {output_path}"
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                return False, f"圧縮に失敗しました:\n{error_msg}"
+
+        finally:
+            # Clean up temp file
+            try:
+                Path(config_file).unlink()
+            except:
+                pass
 
     except subprocess.TimeoutExpired:
         return False, "圧縮がタイムアウトしました"
     except Exception as e:
-        return False, f"エラーが発生しました: {str(e)}"
+        import traceback
+        return False, f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
