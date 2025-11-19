@@ -578,12 +578,26 @@ class BrowsePage(QWidget):
         command = self.config.get_foxglove_command()
 
         try:
-            subprocess.Popen([command, file_path])
-            QMessageBox.information(
-                self,
-                "起動",
-                f"Foxglove Studioでファイルを開きました。\n{Path(file_path).name}"
-            )
+            # Open Foxglove with the bag file path directly
+            # Foxglove can handle both .mcap files and directory-based bags
+            path_obj = Path(file_path)
+
+            # If it's a .mcap file, use it directly
+            if path_obj.is_file() and path_obj.suffix == '.mcap':
+                subprocess.Popen([command, str(path_obj)])
+            # If it's a directory (old bag format), check for .mcap or .db3 inside
+            elif path_obj.is_dir():
+                # Look for .mcap file in directory
+                mcap_files = list(path_obj.glob('*.mcap'))
+                if mcap_files:
+                    subprocess.Popen([command, str(mcap_files[0])])
+                else:
+                    # Fall back to opening the directory itself
+                    subprocess.Popen([command, str(path_obj)])
+            else:
+                # Fall back to original path
+                subprocess.Popen([command, str(file_path)])
+
         except Exception as e:
             QMessageBox.critical(
                 self,
