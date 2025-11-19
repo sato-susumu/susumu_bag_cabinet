@@ -411,9 +411,9 @@ class BrowsePage(QWidget):
 
         progress = QProgressDialog(
             "圧縮処理を開始しています...",
-            "キャンセル",
+            None,  # No cancel button
             0,
-            len(selected),
+            0,  # 0 to 0 = indeterminate (busy indicator)
             self
         )
         progress.setWindowTitle("圧縮中")
@@ -422,7 +422,6 @@ class BrowsePage(QWidget):
         progress.setAutoReset(False)
         progress.setAutoClose(False)
         progress.setMinimumWidth(400)
-        progress.setValue(0)
         progress.show()
         QCoreApplication.processEvents()
         import time
@@ -434,13 +433,9 @@ class BrowsePage(QWidget):
         failed_files = []
 
         for i, file_path in enumerate(selected):
-            if progress.wasCanceled():
-                break
-
             # Update progress
             filename = Path(file_path).name
             progress.setLabelText(f"圧縮中... ({i+1}/{len(selected)})\n{filename}")
-            progress.setValue(i)
             QCoreApplication.processEvents()
 
             success, message = compress_bag(file_path, format_choice)
@@ -449,7 +444,6 @@ class BrowsePage(QWidget):
             else:
                 failed_files.append(f"{Path(file_path).name}: {message}")
 
-        progress.setValue(len(selected))
         progress.close()
 
         # Show results
@@ -520,9 +514,9 @@ class BrowsePage(QWidget):
 
         progress = QProgressDialog(
             "修復処理を開始しています...",
-            "キャンセル",
+            None,  # No cancel button
             0,
-            len(files_to_repair),
+            0,  # 0 to 0 = indeterminate (busy indicator)
             self
         )
         progress.setWindowTitle("修復中")
@@ -531,7 +525,6 @@ class BrowsePage(QWidget):
         progress.setAutoReset(False)
         progress.setAutoClose(False)
         progress.setMinimumWidth(400)
-        progress.setValue(0)
         progress.show()
         QCoreApplication.processEvents()
         time.sleep(0.1)
@@ -542,13 +535,9 @@ class BrowsePage(QWidget):
         failed_files = []
 
         for i, file_path in enumerate(files_to_repair):
-            if progress.wasCanceled():
-                break
-
             # Update progress
             filename = Path(file_path).name
             progress.setLabelText(f"修復中... ({i+1}/{len(files_to_repair)})\n{filename}")
-            progress.setValue(i)
             QCoreApplication.processEvents()
 
             success, message = repair_bag(file_path)
@@ -557,7 +546,6 @@ class BrowsePage(QWidget):
             else:
                 failed_files.append(f"{Path(file_path).name}: {message}")
 
-        progress.setValue(len(files_to_repair))
         progress.close()
 
         # Show results
@@ -633,9 +621,9 @@ class BrowsePage(QWidget):
 
         progress = QProgressDialog(
             "削除処理を開始しています...",
-            "キャンセル",
+            None,  # No cancel button
             0,
-            len(selected),
+            0,  # 0 to 0 = indeterminate (busy indicator)
             self
         )
         progress.setWindowTitle("削除中")
@@ -644,7 +632,6 @@ class BrowsePage(QWidget):
         progress.setAutoReset(False)
         progress.setAutoClose(False)
         progress.setMinimumWidth(400)
-        progress.setValue(0)
         progress.show()
         QCoreApplication.processEvents()
         time.sleep(0.1)
@@ -655,13 +642,9 @@ class BrowsePage(QWidget):
         failed_files = []
 
         for i, file_path in enumerate(selected):
-            if progress.wasCanceled():
-                break
-
             # Update progress
             filename = Path(file_path).name
             progress.setLabelText(f"削除中... ({i+1}/{len(selected)})\n{filename}")
-            progress.setValue(i)
             QCoreApplication.processEvents()
 
             try:
@@ -675,7 +658,6 @@ class BrowsePage(QWidget):
             except Exception as e:
                 failed_files.append(f"{filename}: {str(e)}")
 
-        progress.setValue(len(selected))
         progress.close()
 
         # Show results
