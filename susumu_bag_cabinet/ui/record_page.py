@@ -200,7 +200,7 @@ class RecordPage(QWidget):
             # Update UI
             self.status_label.setText("記録中")
             self.status_label.setStyleSheet("QLabel { color: red; }")
-            self.filename_label.setText(f"{filename}.mcap")  # Show actual filename
+            self.filename_label.setText(str(self.output_path))  # Show full file path
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
             self.home_btn.setEnabled(False)
