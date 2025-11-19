@@ -111,6 +111,18 @@ class SettingsPage(QWidget):
         foxglove_group.setLayout(foxglove_layout)
         layout.addWidget(foxglove_group)
 
+        # Desktop shortcut group
+        shortcut_group = QGroupBox("デスクトップショートカット")
+        shortcut_layout = QVBoxLayout()
+
+        shortcut_btn = QPushButton("デスクトップにショートカットを作成")
+        shortcut_btn.setMinimumHeight(40)
+        shortcut_btn.clicked.connect(self._create_desktop_shortcut)
+        shortcut_layout.addWidget(shortcut_btn)
+
+        shortcut_group.setLayout(shortcut_layout)
+        layout.addWidget(shortcut_group)
+
         layout.addStretch()
 
         # Buttons
@@ -184,6 +196,61 @@ class SettingsPage(QWidget):
                 self,
                 "エラー",
                 f"Foxglove Studioの起動に失敗しました:\n{str(e)}"
+            )
+
+    def _create_desktop_shortcut(self):
+        """Create desktop shortcut for the application."""
+        import os
+        from pathlib import Path
+
+        desktop_path = Path.home() / "Desktop"
+        if not desktop_path.exists():
+            desktop_path = Path.home() / "デスクトップ"
+
+        if not desktop_path.exists():
+            QMessageBox.warning(
+                self,
+                "警告",
+                "デスクトップフォルダが見つかりません。"
+            )
+            return
+
+        # Get the path to the main script
+        app_path = Path(__file__).parent.parent / "main.py"
+        python_exec = "python3"
+
+        # Create .desktop file content
+        desktop_file_content = f"""[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Susumu Bag Cabinet
+Comment=ROS2 Bag管理アプリケーション
+Exec={python_exec} -m susumu_bag_cabinet.main
+Icon=folder
+Terminal=false
+Categories=Development;Utility;
+"""
+
+        desktop_file_path = desktop_path / "susumu_bag_cabinet.desktop"
+
+        try:
+            # Write .desktop file
+            with open(desktop_file_path, 'w', encoding='utf-8') as f:
+                f.write(desktop_file_content)
+
+            # Make it executable
+            os.chmod(desktop_file_path, 0o755)
+
+            QMessageBox.information(
+                self,
+                "成功",
+                f"デスクトップにショートカットを作成しました。\n{desktop_file_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"ショートカットの作成に失敗しました:\n{str(e)}"
             )
 
     def _save_and_go_home(self):
