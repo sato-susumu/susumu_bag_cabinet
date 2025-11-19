@@ -128,6 +128,19 @@ class BrowsePage(QWidget):
 
         layout.addLayout(button_layout2)
 
+        # Delete button (in a separate row for safety)
+        button_layout3 = QHBoxLayout()
+        button_layout3.addStretch()
+
+        self.delete_btn = QPushButton("選択したファイルを削除")
+        self.delete_btn.setStyleSheet("QPushButton { background-color: #ff6b6b; color: white; }")
+        self.delete_btn.setMinimumHeight(40)
+        self.delete_btn.clicked.connect(self._delete_selected)
+        button_layout3.addWidget(self.delete_btn)
+
+        button_layout3.addStretch()
+        layout.addLayout(button_layout3)
+
         # Home button
         self.home_btn = QPushButton("ホームへ戻る")
         self.home_btn.setMinimumHeight(40)
@@ -527,6 +540,84 @@ class BrowsePage(QWidget):
                 "エラー",
                 f"Foxglove Studioの起動に失敗しました:\n{str(e)}"
             )
+
+    def _delete_selected(self):
+        """Delete selected bag files."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        # Show warning and confirm
+        file_list = "\n".join([f"- {Path(p).name}" for p in selected[:10]])
+        if len(selected) > 10:
+            file_list += f"\n... 他{len(selected) - 10}個"
+
+        reply = QMessageBox.warning(
+            self,
+            "削除の確認",
+            f"{len(selected)}個のファイルを完全に削除します。\nこの操作は元に戻せません！\n\n削除されるファイル:\n{file_list}\n\n本当に削除しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.No:
+            return
+
+        # Create progress dialog
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog(
+            "削除処理を実行中...",
+            "キャンセル",
+            0,
+            len(selected),
+            self
+        )
+        progress.setWindowTitle("削除中")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        # Delete files
+        success_count = 0
+        failed_files = []
+
+        for i, file_path in enumerate(selected):
+            if progress.wasCanceled():
+                break
+
+            # Update progress
+            filename = Path(file_path).name
+            progress.setLabelText(f"削除中... ({i+1}/{len(selected)})\n{filename}")
+            progress.setValue(i)
+
+            # Force UI update
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+
+            try:
+                import shutil
+                path_obj = Path(file_path)
+                if path_obj.is_file():
+                    path_obj.unlink()
+                elif path_obj.is_dir():
+                    shutil.rmtree(path_obj)
+                success_count += 1
+            except Exception as e:
+                failed_files.append(f"{filename}: {str(e)}")
+
+        progress.setValue(len(selected))
+        progress.close()
+
+        # Show results
+        result_msg = f"削除完了: {success_count}/{len(selected)}個"
+        if failed_files:
+            result_msg += "\n\n失敗したファイル:\n" + "\n".join(failed_files[:5])
+            if len(failed_files) > 5:
+                result_msg += f"\n...他{len(failed_files) - 5}個"
+
+        QMessageBox.information(self, "削除結果", result_msg)
+        self._refresh()
 
     def _refresh(self):
         """Refresh the file list."""
