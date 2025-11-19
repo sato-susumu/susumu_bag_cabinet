@@ -299,4 +299,3 @@ class RecordPage(QWidget):
     def refresh_config(self):
         """Refresh the display based on current config."""
         self._update_folder_display()
-        self._update_filename_preview()
