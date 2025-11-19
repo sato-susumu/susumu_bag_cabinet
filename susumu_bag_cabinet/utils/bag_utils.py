@@ -39,8 +39,15 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
     # Detect format
     if bag_path.endswith('.mcap'):
         result["format"] = "MCAP"
-    elif path_obj.is_dir() and (path_obj / 'metadata.yaml').exists():
-        result["format"] = "ROS2"
+    elif bag_path.endswith('.db3'):
+        result["format"] = "DB3"
+    elif path_obj.is_dir():
+        if (path_obj / 'metadata.yaml').exists():
+            result["format"] = "ROS2"
+        elif list(path_obj.glob('*.db3')):
+            result["format"] = "DB3 (Dir)"
+        elif list(path_obj.glob('*.mcap')):
+            result["format"] = "MCAP (Dir)"
 
     # Try to get metadata using ros2 bag info
     try:
@@ -147,13 +154,41 @@ def scan_bag_folder(folder_path: str) -> list:
         return []
 
     bag_files = []
+    seen = set()  # To avoid duplicates
 
-    # Find .mcap files
-    bag_files.extend(str(p) for p in folder.glob('*.mcap'))
+    # Find .mcap files directly in the folder
+    for p in folder.glob('*.mcap'):
+        bag_files.append(str(p))
+        seen.add(str(p))
 
-    # Find bag directories (containing metadata.yaml)
+    # Find bag directories and their contents
     for item in folder.iterdir():
-        if item.is_dir() and (item / 'metadata.yaml').exists():
+        if not item.is_dir():
+            continue
+
+        # Check if directory has metadata.yaml (ROS2 bag directory)
+        if (item / 'metadata.yaml').exists():
             bag_files.append(str(item))
+            seen.add(str(item))
+        else:
+            # Check if directory contains .mcap or .db3 files
+            # This handles cases where bag files are stored in subdirectories
+            mcap_files = list(item.glob('*.mcap'))
+            db3_files = list(item.glob('*.db3'))
+
+            if mcap_files:
+                # If there are .mcap files in the directory, add the first one
+                # (usually there's only one per directory)
+                file_path = str(mcap_files[0])
+                if file_path not in seen:
+                    bag_files.append(file_path)
+                    seen.add(file_path)
+            elif db3_files:
+                # If there are .db3 files, treat the directory as a bag
+                # (this is the old ROS2 bag format without metadata.yaml)
+                dir_path = str(item)
+                if dir_path not in seen:
+                    bag_files.append(dir_path)
+                    seen.add(dir_path)
 
     return sorted(bag_files, key=lambda x: Path(x).stat().st_mtime, reverse=True)
