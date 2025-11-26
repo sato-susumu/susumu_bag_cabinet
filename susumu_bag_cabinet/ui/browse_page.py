@@ -7,14 +7,17 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QProgressBar, QCheckBox
+    QProgressBar, QCheckBox, QDialog, QTextEdit
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
-from susumu_bag_cabinet.utils.bag_utils import format_size
-from susumu_bag_cabinet.utils.bag_operations import repair_bag, compress_bag
+from susumu_bag_cabinet.utils.bag_utils import format_size, format_duration
+from susumu_bag_cabinet.utils.bag_operations import repair_bag
 from susumu_bag_cabinet.workers.bag_scanner import BagScanner
+from susumu_bag_cabinet.ui.custom_widgets import (
+    LargeButton, DeleteButton, IndeterminateProgressDialog
+)
 
 
 class BrowsePage(QWidget):
@@ -72,24 +75,27 @@ class BrowsePage(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
-            "選択", "ファイル名", "サイズ", "記録開始日時",
-            "形式", "圧縮状態", "整合性"
+            "選択", "ファイル名", "サイズ", "記録開始日時", "記録時間",
+            "形式"
         ])
 
         # Set column widths
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Allow manual resize
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+        # Set initial width for filename column (wider to accommodate full paths)
+        self.table.setColumnWidth(1, 400)
 
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
+        self.table.setSortingEnabled(True)  # ヘッダークリックでソート可能に
         self.table.cellClicked.connect(self._on_table_cell_clicked)
 
         layout.addWidget(self.table)
@@ -117,44 +123,20 @@ class BrowsePage(QWidget):
 
         button_layout2 = QHBoxLayout()
 
-        self.compress_btn = QPushButton("圧縮する")
-        self.compress_btn.clicked.connect(self._compress_selected)
-        self.compress_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
-        button_layout2.addWidget(self.compress_btn)
+        self.info_btn = LargeButton("Info", min_height=40, font_size=12)
+        self.info_btn.clicked.connect(self._show_info)
+        button_layout2.addWidget(self.info_btn)
 
-        self.check_btn = QPushButton("整合性チェック")
-        self.check_btn.clicked.connect(self._check_integrity)
-        self.check_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
-        button_layout2.addWidget(self.check_btn)
+        self.open_btn = LargeButton("オープンする", min_height=40, font_size=12)
+        self.open_btn.clicked.connect(self._open_selected)
+        button_layout2.addWidget(self.open_btn)
 
-        self.repair_btn = QPushButton("修復を試みる")
+        self.repair_btn = LargeButton("修復を試みる", min_height=40, font_size=12)
         self.repair_btn.clicked.connect(self._repair_selected)
-        self.repair_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
         button_layout2.addWidget(self.repair_btn)
 
-        self.foxglove_btn = QPushButton("Foxgloveで再生")
+        self.foxglove_btn = LargeButton("Foxgloveで再生", min_height=40, font_size=12)
         self.foxglove_btn.clicked.connect(self._play_in_foxglove)
-        self.foxglove_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
         button_layout2.addWidget(self.foxglove_btn)
 
         layout.addLayout(button_layout2)
@@ -282,24 +264,57 @@ class BrowsePage(QWidget):
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
             self.table.setCellWidget(row, 0, checkbox_widget)
 
-            # Filename
-            filename = Path(file_path).name
-            self.table.setItem(row, 1, QTableWidgetItem(filename))
+            # Filename (relative path from base folder + actual .mcap filename)
+            base_folder = Path(self.config.get_bag_folder())
+            file_path_obj = Path(file_path)
 
-            # Size (will be updated)
+            try:
+                # Get relative path of the directory/file
+                relative_dir = file_path_obj.relative_to(base_folder)
+
+                if file_path_obj.is_dir():
+                    # Find the first .mcap or .mcap.* file in the directory
+                    mcap_files = [f for f in file_path_obj.iterdir()
+                                  if f.is_file() and '.mcap' in f.name]
+                    if mcap_files:
+                        # Sort to get consistent ordering
+                        mcap_files.sort()
+                        # Combine relative directory path with .mcap filename
+                        display_name = str(relative_dir / mcap_files[0].name)
+                    else:
+                        # Fallback to directory name if no .mcap file found
+                        display_name = str(relative_dir)
+                else:
+                    display_name = str(relative_dir)
+            except ValueError:
+                # If file is not in base folder, use absolute path
+                if file_path_obj.is_dir():
+                    mcap_files = [f for f in file_path_obj.iterdir()
+                                  if f.is_file() and '.mcap' in f.name]
+                    if mcap_files:
+                        mcap_files.sort()
+                        display_name = str(file_path_obj / mcap_files[0].name)
+                    else:
+                        display_name = str(file_path_obj)
+                else:
+                    display_name = str(file_path_obj)
+
+            filename_item = QTableWidgetItem(display_name)
+            # Set tooltip to show full path on hover
+            filename_item.setToolTip(display_name)
+            self.table.setItem(row, 1, filename_item)
+
+            # サイズ（後で更新される）
             self.table.setItem(row, 2, QTableWidgetItem("-"))
 
-            # Start time (will be updated)
+            # 記録開始日時（後で更新される）
             self.table.setItem(row, 3, QTableWidgetItem("読込中..."))
 
-            # Format (will be updated)
+            # 記録時間（後で更新される）
             self.table.setItem(row, 4, QTableWidgetItem("-"))
 
-            # Compression (will be updated)
-            self.table.setItem(row, 5, QTableWidgetItem("未チェック"))
-
-            # Integrity (will be updated)
-            self.table.setItem(row, 6, QTableWidgetItem("未チェック"))
+            # 形式（後で更新される）
+            self.table.setItem(row, 5, QTableWidgetItem("-"))
 
         # Update button states after populating table
         self._update_button_states()
@@ -312,21 +327,59 @@ class BrowsePage(QWidget):
             info: Information dictionary
         """
         # Find the row for this file
+        base_folder = Path(self.config.get_bag_folder())
+        file_path_obj = Path(path)
+
+        try:
+            # Get relative path of the directory/file
+            relative_dir = file_path_obj.relative_to(base_folder)
+
+            if file_path_obj.is_dir():
+                # Find the first .mcap or .mcap.* file in the directory
+                mcap_files = [f for f in file_path_obj.iterdir()
+                              if f.is_file() and '.mcap' in f.name]
+                if mcap_files:
+                    mcap_files.sort()
+                    # Combine relative directory path with .mcap filename
+                    display_name = str(relative_dir / mcap_files[0].name)
+                else:
+                    # Fallback to directory name if no .mcap file found
+                    display_name = str(relative_dir)
+            else:
+                display_name = str(relative_dir)
+        except ValueError:
+            # If file is not in base folder, use absolute path
+            if file_path_obj.is_dir():
+                mcap_files = [f for f in file_path_obj.iterdir()
+                              if f.is_file() and '.mcap' in f.name]
+                if mcap_files:
+                    mcap_files.sort()
+                    display_name = str(file_path_obj / mcap_files[0].name)
+                else:
+                    display_name = str(file_path_obj)
+            else:
+                display_name = str(file_path_obj)
+
         row = -1
         for i in range(self.table.rowCount()):
             item = self.table.item(i, 1)
-            if item and Path(path).name == item.text():
+            if item and display_name == item.text():
                 row = i
                 break
 
         if row == -1:
             return
 
+        # Update filename tooltip (in case it wasn't set)
+        filename_item = self.table.item(row, 1)
+        if filename_item:
+            filename_item.setToolTip(display_name)
+
         # Update size
         size_str = format_size(info.get("size", 0))
         self.table.setItem(row, 2, QTableWidgetItem(size_str))
 
-        # Update start time
+        # 記録開始日時を更新
         start_time = info.get("start_time")
         if start_time:
             if isinstance(start_time, str):
@@ -337,32 +390,69 @@ class BrowsePage(QWidget):
             time_str = "不明"
         self.table.setItem(row, 3, QTableWidgetItem(time_str))
 
-        # Update format
+        # 記録時間を更新
+        duration_str = format_duration(info.get("duration"))
+        self.table.setItem(row, 4, QTableWidgetItem(duration_str))
+
+        # 形式を更新
         format_str = info.get("format", "Unknown")
-        self.table.setItem(row, 4, QTableWidgetItem(format_str))
+        self.table.setItem(row, 5, QTableWidgetItem(format_str))
 
-        # Update compression
-        compression_str = info.get("compression", "未チェック")
-        self.table.setItem(row, 5, QTableWidgetItem(compression_str))
-
-        # Update integrity
-        is_valid = info.get("is_valid", "未チェック")
-        self.table.setItem(row, 6, QTableWidgetItem(str(is_valid)))
+        # Update button states (repair button needs to check if any files have errors)
+        self._update_button_states()
 
     def _get_selected_files(self):
         """Get list of selected file paths."""
         selected = []
+        base_folder = Path(self.config.get_bag_folder())
+
         for row in range(self.table.rowCount()):
             checkbox_widget = self.table.cellWidget(row, 0)
             if checkbox_widget:
                 checkbox = checkbox_widget.findChild(QCheckBox)
                 if checkbox and checkbox.isChecked():
-                    filename = self.table.item(row, 1).text()
-                    # Find full path
+                    display_name = self.table.item(row, 1).text()
+                    # Find full path by matching the display name
                     for file_path in self.bag_files:
-                        if Path(file_path).name == filename:
-                            selected.append(file_path)
-                            break
+                        file_path_obj = Path(file_path)
+
+                        try:
+                            # Get relative path of the directory/file
+                            relative_dir = file_path_obj.relative_to(base_folder)
+
+                            # Check if it's a directory with .mcap files
+                            if file_path_obj.is_dir():
+                                mcap_files = [f for f in file_path_obj.iterdir()
+                                              if f.is_file() and '.mcap' in f.name]
+                                if mcap_files:
+                                    mcap_files.sort()
+                                    # Compare with relative path + mcap filename
+                                    check_name = str(relative_dir / mcap_files[0].name)
+                                    if check_name == display_name:
+                                        selected.append(file_path)
+                                        break
+                                else:
+                                    if str(relative_dir) == display_name:
+                                        selected.append(file_path)
+                                        break
+                            # Check if it's a standalone file
+                            elif str(relative_dir) == display_name:
+                                selected.append(file_path)
+                                break
+                        except ValueError:
+                            # Handle absolute paths
+                            if file_path_obj.is_dir():
+                                mcap_files = [f for f in file_path_obj.iterdir()
+                                              if f.is_file() and '.mcap' in f.name]
+                                if mcap_files:
+                                    mcap_files.sort()
+                                    check_name = str(file_path_obj / mcap_files[0].name)
+                                    if check_name == display_name:
+                                        selected.append(file_path)
+                                        break
+                            elif str(file_path_obj) == display_name:
+                                selected.append(file_path)
+                                break
         return selected
 
     def _on_table_cell_clicked(self, row, column):
@@ -394,93 +484,114 @@ class BrowsePage(QWidget):
                     checkbox.setChecked(False)
         self._update_button_states()
 
-    def _compress_selected(self):
-        """Compress selected bag files."""
+    def _open_selected(self):
+        """Open selected files in file manager."""
         selected = self._get_selected_files()
         if not selected:
             QMessageBox.information(self, "情報", "ファイルが選択されていません。")
             return
 
-        # Ask user to confirm
-        reply = QMessageBox.question(
-            self,
-            "圧縮の確認",
-            f"{len(selected)}個のファイルをZstd形式で圧縮します。\n\n元のファイルは保持され、圧縮されたファイルは別名で保存されます。\n続行しますか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
+        # Open each selected file/directory in file manager
+        for file_path in selected:
+            try:
+                path_obj = Path(file_path)
 
-        if not reply == QMessageBox.StandardButton.Yes:
+                # Use xdg-open on Linux to open the directory in file manager
+                if path_obj.is_dir():
+                    # Open directory
+                    subprocess.Popen(['xdg-open', str(path_obj)])
+                elif path_obj.is_file():
+                    # Open parent directory and select the file
+                    subprocess.Popen(['xdg-open', str(path_obj.parent)])
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "警告",
+                        f"ファイルが見つかりません:\n{file_path}"
+                    )
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "エラー",
+                    f"ファイルを開けませんでした:\n{file_path}\n\n{str(e)}"
+                )
+
+    def _show_info(self):
+        """Show mcap info for selected file."""
+        selected = self._get_selected_files()
+
+        if len(selected) == 0:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
             return
 
-        format_choice = "zstd"  # Use zstd as it's available
+        if len(selected) > 1:
+            QMessageBox.information(self, "情報", "1つのファイルのみを選択してください。")
+            return
 
-        # Create progress dialog
-        from PySide6.QtWidgets import QProgressDialog
-        from PySide6.QtCore import QCoreApplication
+        file_path = selected[0]
+        path_obj = Path(file_path)
 
-        progress = QProgressDialog(
-            "圧縮処理を開始しています...",
-            None,  # No cancel button
-            0,
-            0,  # 0 to 0 = indeterminate (busy indicator)
-            self
-        )
-        progress.setWindowTitle("圧縮中")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setAutoReset(False)
-        progress.setAutoClose(False)
-        progress.setMinimumWidth(400)
-        progress.show()
-        QCoreApplication.processEvents()
-        import time
-        time.sleep(0.1)
-        QCoreApplication.processEvents()
+        # Find the actual .mcap file
+        mcap_file = None
+        if path_obj.is_dir():
+            # Find .mcap or .mcap.* files in directory
+            mcap_files = [f for f in path_obj.iterdir()
+                          if f.is_file() and '.mcap' in f.name and f.name != 'metadata.yaml']
+            if mcap_files:
+                mcap_files.sort()
+                mcap_file = mcap_files[0]
+        elif path_obj.is_file():
+            mcap_file = path_obj
 
-        # Process files
-        success_count = 0
-        failed_files = []
+        if not mcap_file:
+            QMessageBox.warning(
+                self,
+                "警告",
+                "MCAPファイルが見つかりません。"
+            )
+            return
 
-        for i, file_path in enumerate(selected):
-            # Update progress
-            filename = Path(file_path).name
-            progress.setLabelText(f"圧縮中... ({i+1}/{len(selected)})\n{filename}")
-            QCoreApplication.processEvents()
+        # Run mcap info command
+        try:
+            result = subprocess.run(
+                ['mcap', 'info', str(mcap_file)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
 
-            success, message = compress_bag(file_path, format_choice)
-            if success:
-                success_count += 1
+            if result.returncode == 0:
+                output = result.stdout
             else:
-                failed_files.append(f"{Path(file_path).name}: {message}")
+                output = f"エラーが発生しました:\n{result.stderr}"
+        except FileNotFoundError:
+            output = "mcapコマンドが見つかりません。\nmcap CLIツールをインストールしてください。"
+        except subprocess.TimeoutExpired:
+            output = "コマンドがタイムアウトしました。"
+        except Exception as e:
+            output = f"エラーが発生しました:\n{str(e)}"
 
-        progress.close()
+        # Show result in dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"MCAP Info - {mcap_file.name}")
+        dialog.resize(800, 600)
 
-        # Show results
-        result_msg = f"圧縮完了: {success_count}/{len(selected)}個"
-        if failed_files:
-            result_msg += "\n\n失敗したファイル:\n" + "\n".join(failed_files[:5])
-            if len(failed_files) > 5:
-                result_msg += f"\n...他{len(failed_files) - 5}個"
+        layout = QVBoxLayout()
 
-        QMessageBox.information(self, "圧縮結果", result_msg)
-        self._refresh()
+        # Text area for output
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(output)
+        text_edit.setFont(QFont("Monospace", 20))
+        layout.addWidget(text_edit)
 
-    def _check_integrity(self):
-        """Check integrity of selected files."""
-        selected = self._get_selected_files()
-        if not selected:
-            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
-            return
+        # Close button
+        close_btn = QPushButton("閉じる")
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
 
-        # Re-scan selected files
-        QMessageBox.information(
-            self,
-            "情報",
-            f"整合性チェックを開始します。\n選択されたファイル: {len(selected)}個"
-        )
-        # The info is already being checked during scan
-        self._refresh()
+        dialog.setLayout(layout)
+        dialog.exec()
 
     def _repair_selected(self):
         """Repair selected bag files."""
@@ -517,10 +628,9 @@ class BrowsePage(QWidget):
         if reply == QMessageBox.StandardButton.No:
             return
 
-        # Create progress dialog
+        # Create and show progress dialog immediately
         from PySide6.QtWidgets import QProgressDialog
         from PySide6.QtCore import QCoreApplication
-        import time
 
         progress = QProgressDialog(
             "修復処理を開始しています...",
@@ -535,9 +645,10 @@ class BrowsePage(QWidget):
         progress.setAutoReset(False)
         progress.setAutoClose(False)
         progress.setMinimumWidth(400)
+        progress.setValue(0)  # Force display
         progress.show()
-        QCoreApplication.processEvents()
-        time.sleep(0.1)
+        progress.raise_()
+        progress.activateWindow()
         QCoreApplication.processEvents()
 
         # Process files
@@ -739,10 +850,19 @@ class BrowsePage(QWidget):
         selected_files = self._get_selected_files()
         has_selection = len(selected_files) > 0
 
+        # Check if any selected files have integrity issues
+        has_error_files = False
+        for file_path in selected_files:
+            if file_path in self.file_info:
+                is_valid = self.file_info[file_path].get("is_valid", "")
+                if is_valid == "NG" or "エラー" in str(is_valid):
+                    has_error_files = True
+                    break
+
         # Enable/disable buttons based on selection
-        self.compress_btn.setEnabled(has_selection)
-        self.check_btn.setEnabled(has_selection)
-        self.repair_btn.setEnabled(has_selection)
+        self.info_btn.setEnabled(len(selected_files) == 1)  # Only for single file
+        self.open_btn.setEnabled(has_selection)
+        self.repair_btn.setEnabled(has_error_files)  # Only enable if there are files with errors
         self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.delete_btn.setEnabled(has_selection)
         self.deselect_all_btn.setEnabled(has_selection)
