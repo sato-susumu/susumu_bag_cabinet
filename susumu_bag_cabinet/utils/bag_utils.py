@@ -21,23 +21,23 @@ def detect_mcap_compression(mcap_path: str) -> str:
     """
     try:
         with open(mcap_path, 'rb') as f:
-            # Read first 1KB to check for compression markers
+            # 最初の1KBを読み込んで圧縮マーカーを確認
             header = f.read(1024)
 
-            # Check for common compression signatures
-            # LZ4 magic number: 0x184D2204
+            # 一般的な圧縮シグネチャをチェック
+            # LZ4マジックナンバー: 0x184D2204
             if b'\x04\x22\x4D\x18' in header:
                 return "圧縮(LZ4)"
 
-            # Zstd magic number: 0xFD2FB528
+            # Zstdマジックナンバー: 0xFD2FB528
             if b'\x28\xB5\x2F\xFD' in header or b'zstd' in header.lower():
                 return "圧縮(Zstd)"
 
-            # Read more data to check chunk compression
+            # チャンク圧縮を確認するためにさらにデータを読み込む
             f.seek(0)
             data = f.read(8192)
 
-            # Look for compression field indicators in MCAP format
+            # MCAP形式の圧縮フィールド指示子を探す
             if b'lz4' in data.lower():
                 return "圧縮(LZ4)"
             if b'zstd' in data.lower():
@@ -63,11 +63,12 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
         "size": 0,
         "format": "Unknown",
         "start_time": None,
+        "duration": None,
         "compression": "未チェック",
         "is_valid": "未チェック",
     }
 
-    # Get file/directory size
+    # ファイル/ディレクトリのサイズを取得
     path_obj = Path(bag_path)
     if path_obj.exists():
         if path_obj.is_file():
@@ -75,31 +76,20 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
         elif path_obj.is_dir():
             result["size"] = sum(f.stat().st_size for f in path_obj.rglob('*') if f.is_file())
 
-    # Detect format
-    if bag_path.endswith('.mcap'):
+    # 形式を検出（MCAPのみ）
+    if '.mcap' in bag_path:
+        # .mcap, .mcap.zstd, .mcap.lz4 などを全て認識
         result["format"] = "MCAP"
-    elif bag_path.endswith('.db3'):
-        result["format"] = "DB3"
     elif path_obj.is_dir():
-        # Check what files are inside the directory
+        # ディレクトリ内のファイルを確認
         has_metadata = (path_obj / 'metadata.yaml').exists()
-        mcap_files = list(path_obj.glob('*.mcap'))
-        db3_files = list(path_obj.glob('*.db3'))
+        mcap_files = [f for f in path_obj.iterdir()
+                      if f.is_file() and '.mcap' in f.name]
 
-        if has_metadata:
-            # ROS2 bag directory - check what format it contains
-            if mcap_files:
-                result["format"] = "MCAP"
-            elif db3_files:
-                result["format"] = "DB3"
-            else:
-                result["format"] = "MCAP"  # Default for ROS2 bags
-        elif db3_files:
-            result["format"] = "DB3"
-        elif mcap_files:
+        if has_metadata or mcap_files:
             result["format"] = "MCAP"
 
-    # Try to get metadata using ros2 bag info
+    # ros2 bag infoを使用してメタデータを取得
     try:
         cmd = ['ros2', 'bag', 'info', bag_path]
         process = subprocess.run(
@@ -113,26 +103,36 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
             output = process.stdout
             result["is_valid"] = "OK"
 
-            # Parse start time
+            # 開始時刻を解析
             time_match = re.search(r'Start:\s+([^\n]+)', output)
             if time_match:
                 time_str = time_match.group(1).strip()
                 try:
-                    # Try to parse the timestamp
-                    # Format: "Jan 1 2025 12:34:56.789 (1234567890.123)"
-                    # We'll extract the unix timestamp in parentheses if available
+                    # タイムスタンプを解析
+                    # 形式: "Jan 1 2025 12:34:56.789 (1234567890.123)"
+                    # 括弧内のunixタイムスタンプを抽出（利用可能な場合）
                     unix_match = re.search(r'\((\d+\.\d+)\)', time_str)
                     if unix_match:
                         timestamp = float(unix_match.group(1))
                         result["start_time"] = datetime.fromtimestamp(timestamp)
                     else:
-                        # Try to parse the human-readable format
-                        # This is a fallback and may not work for all formats
+                        # 人間が読める形式を解析
+                        # これはフォールバックで、すべての形式で機能するとは限らない
                         result["start_time"] = time_str
                 except Exception:
                     result["start_time"] = time_str
 
-            # Check for compression info (ros2 bag info doesn't always show it)
+            # 記録時間（duration）を解析
+            duration_match = re.search(r'Duration:\s+([^\n]+)', output)
+            if duration_match:
+                duration_str = duration_match.group(1).strip()
+                try:
+                    # 形式: "12.345s" or "1m23.456s" など
+                    result["duration"] = duration_str
+                except Exception:
+                    result["duration"] = duration_str
+
+            # 圧縮情報を確認（ros2 bag infoは常に表示するとは限らない）
             if 'compression' in output.lower():
                 if 'lz4' in output.lower():
                     result["compression"] = "圧縮(LZ4)"
@@ -150,19 +150,32 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
     except Exception as e:
         result["is_valid"] = f"エラー: {str(e)}"
 
-    # If compression is still not determined and it's an MCAP file, check directly
+    # 圧縮が未判定でMCAPファイルの場合、直接確認
     if result["compression"] == "未チェック" and result["format"] == "MCAP":
-        # Find the actual MCAP file path
+        # 実際のMCAPファイルパスを見つける
         mcap_file = None
-        if path_obj.is_file() and bag_path.endswith('.mcap'):
+        if path_obj.is_file() and '.mcap' in bag_path:
             mcap_file = bag_path
         elif path_obj.is_dir():
-            mcap_files = list(path_obj.glob('*.mcap'))
+            # .mcap または .mcap.* のファイルを検索
+            mcap_files = [f for f in path_obj.iterdir()
+                          if f.is_file() and '.mcap' in f.name]
             if mcap_files:
+                mcap_files.sort()
                 mcap_file = str(mcap_files[0])
 
         if mcap_file:
-            result["compression"] = detect_mcap_compression(mcap_file)
+            # ファイル名から圧縮形式を判定
+            if mcap_file.endswith('.mcap.zstd') or mcap_file.endswith('.zstd'):
+                result["compression"] = "圧縮(Zstd)"
+            elif mcap_file.endswith('.mcap.lz4') or mcap_file.endswith('.lz4'):
+                result["compression"] = "圧縮(LZ4)"
+            elif mcap_file.endswith('.mcap'):
+                # 拡張子が.mcapのみの場合、中身をチェック
+                result["compression"] = detect_mcap_compression(mcap_file)
+            else:
+                # その他の圧縮形式
+                result["compression"] = "圧縮"
 
     return result
 
@@ -176,17 +189,78 @@ def format_size(size_bytes: int) -> str:
     return f"{size_bytes:.1f} PB"
 
 
-def generate_filename(label: str = "", robot_name: str = "", include_robot: bool = False) -> str:
+def format_duration(duration_str: Optional[str]) -> str:
     """
-    Generate a filename for a new bag recording.
+    Format duration in human-readable Japanese format.
 
     Args:
-        label: Optional label to include in filename
-        robot_name: Robot name (used if include_robot is True)
-        include_robot: Whether to include robot name in filename
+        duration_str: Duration string from ros2 bag info (e.g., "12.345s", "1m23.456s")
 
     Returns:
-        Generated filename (without extension)
+        Human-readable duration string in Japanese
+    """
+    if not duration_str:
+        return "-"
+
+    try:
+        # Parse duration string
+        # Formats: "12.345s", "1m23.456s", "1h2m3.456s"
+        total_seconds = 0.0
+
+        # Extract hours if present
+        hours_match = re.search(r'(\d+)h', duration_str)
+        if hours_match:
+            total_seconds += int(hours_match.group(1)) * 3600
+
+        # Extract minutes if present
+        minutes_match = re.search(r'(\d+)m', duration_str)
+        if minutes_match:
+            total_seconds += int(minutes_match.group(1)) * 60
+
+        # Extract seconds (always present)
+        seconds_match = re.search(r'([\d.]+)s', duration_str)
+        if seconds_match:
+            total_seconds += float(seconds_match.group(1))
+
+        # Format based on duration
+        if total_seconds < 1:
+            # Less than 1 second: show milliseconds
+            return f"{total_seconds * 1000:.0f}ミリ秒"
+        elif total_seconds < 60:
+            # Less than 1 minute: show seconds
+            return f"{total_seconds:.1f}秒"
+        elif total_seconds < 3600:
+            # Less than 1 hour: show minutes and seconds
+            minutes = int(total_seconds // 60)
+            seconds = total_seconds % 60
+            return f"{minutes}分{seconds:.0f}秒"
+        else:
+            # 1 hour or more: show hours, minutes, and seconds
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            seconds = total_seconds % 60
+            if seconds > 0:
+                return f"{hours}時間{minutes}分{seconds:.0f}秒"
+            elif minutes > 0:
+                return f"{hours}時間{minutes}分"
+            else:
+                return f"{hours}時間"
+    except Exception:
+        # If parsing fails, return original string
+        return duration_str
+
+
+def generate_folder_name(label: str = "", robot_name: str = "", include_robot: bool = False) -> str:
+    """
+    Generate a folder name for a new bag recording (without .mcap extension).
+
+    Args:
+        label: Optional label to include in folder name
+        robot_name: Robot name (used if include_robot is True)
+        include_robot: Whether to include robot name in folder name
+
+    Returns:
+        Generated folder name (without .mcap extension)
     """
     now = datetime.now()
     timestamp = now.strftime("%Y%m%d_%H%M%S")
@@ -203,53 +277,54 @@ def generate_filename(label: str = "", robot_name: str = "", include_robot: bool
 
 def scan_bag_folder(folder_path: str) -> list:
     """
-    Scan a folder for bag files.
+    Scan a folder recursively for MCAP bag files.
 
     Args:
         folder_path: Path to the folder to scan
 
     Returns:
-        List of bag file/directory paths
+        List of bag file/directory paths (sorted by modification time, newest first)
     """
     folder = Path(folder_path)
     if not folder.exists():
         return []
 
     bag_files = []
-    seen = set()  # To avoid duplicates
+    seen = set()  # 重複を避けるため
 
-    # Find .mcap files directly in the folder
-    for p in folder.glob('*.mcap'):
-        bag_files.append(str(p))
-        seen.add(str(p))
-
-    # Find bag directories and their contents
-    for item in folder.iterdir():
-        if not item.is_dir():
-            continue
-
-        # Check if directory has metadata.yaml (ROS2 bag directory)
-        if (item / 'metadata.yaml').exists():
-            bag_files.append(str(item))
-            seen.add(str(item))
-        else:
-            # Check if directory contains .mcap or .db3 files
-            # This handles cases where bag files are stored in subdirectories
-            mcap_files = list(item.glob('*.mcap'))
-            db3_files = list(item.glob('*.db3'))
-
-            if mcap_files:
-                # If there are .mcap files in the directory, add the first one
-                # (usually there's only one per directory)
-                file_path = str(mcap_files[0])
+    # 方法1: すべての.mcapファイルを再帰的に検索
+    for p in folder.rglob('*.mcap'):
+        if p.is_file():
+            # これがROS2 bagディレクトリの一部かどうか確認
+            parent_dir = p.parent
+            if (parent_dir / 'metadata.yaml').exists():
+                # これはROS2 bagディレクトリ - ディレクトリ自体を追加
+                dir_path = str(parent_dir)
+                if dir_path not in seen:
+                    bag_files.append(dir_path)
+                    seen.add(dir_path)
+            else:
+                # スタンドアロンMCAPファイル
+                file_path = str(p)
                 if file_path not in seen:
                     bag_files.append(file_path)
                     seen.add(file_path)
-            elif db3_files:
-                # If there are .db3 files, treat the directory as a bag
-                # (this is the old ROS2 bag format without metadata.yaml)
-                dir_path = str(item)
-                if dir_path not in seen:
+
+    # 方法2: metadata.yamlを含むすべてのディレクトリを検索
+    # これにより、.mcap拡張子のないROS2 bagディレクトリ（圧縮後など）も検出される
+    for metadata_file in folder.rglob('metadata.yaml'):
+        if metadata_file.is_file():
+            bag_dir = metadata_file.parent
+            dir_path = str(bag_dir)
+            if dir_path not in seen:
+                # このディレクトリ内に.mcapファイルがあるか確認
+                # （.mcap.zstdのような圧縮ファイルでもOK）
+                has_mcap_files = any(
+                    f.suffix == '.mcap' or '.mcap' in f.name
+                    for f in bag_dir.iterdir()
+                    if f.is_file()
+                )
+                if has_mcap_files:
                     bag_files.append(dir_path)
                     seen.add(dir_path)
 
