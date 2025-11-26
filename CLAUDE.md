@@ -8,6 +8,27 @@ Susumu Bag CabinetはROS2のbagファイル（MCAP/DB3形式）を管理する�
 
 ## アーキテクチャ
 
+### MVCパターン
+
+アプリケーションは**Model-View-Controller (MVC)** パターンに基づいて設計されています：
+
+**Model** (`models/`):
+- `BagFile`: 単一のbagファイルを表現
+- `BagCollection`: 複数のbagファイルを管理
+- `Recording`: 記録セッションを管理
+
+**View** (`ui/`):
+- `HomePage`: メインメニュー
+- `RecordPage`: 記録操作UI
+- `BrowsePage`: bagファイル一覧と操作UI
+- `SettingsPage`: 設定UI
+
+**Controller** (`controllers/`):
+- `RecordController`: 記録ページのビジネスロジック
+- `BrowseController`: 閲覧ページのビジネスロジック
+
+詳細は `/doc/クラス設計.md` と `/doc/クラス使用例.md` を参照してください。
+
 ### UI構造（QStackedWidgetベース）
 
 アプリケーションは`MainWindow`が`QStackedWidget`を使って4つのページを管理しています：
@@ -35,8 +56,15 @@ Susumu Bag CabinetはROS2のbagファイル（MCAP/DB3形式）を管理する�
 
 ### ROS2 bag操作
 
-**bag_utils.py**: メタデータ取得、MCAP圧縮検出（バイナリヘッダー検査）
-**bag_operations.py**: 圧縮・修復機能（`ros2 bag convert`を使用、YAMLコンフィグファイル経由）
+**bag_utils.py**:
+- メタデータ取得、MCAP圧縮検出（バイナリヘッダー検査）
+- `generate_folder_name()`: フォルダ名を生成（.mcap拡張子なし）
+- `scan_bag_folder()`: サブフォルダも再帰的に検索してMCAPファイルを発見（MCAP形式のみサポート）
+
+**bag_operations.py**:
+- 圧縮・修復機能（`ros2 bag convert`を使用、YAMLコンフィグファイル経由）
+- `compress_bag()`: 元ファイルを保持し、新しい圧縮ファイル（`*_compressed_zstd`）を作成
+- MCAP形式のみサポート（DB3形式は非サポート）
 
 ## 重要な実装パターン
 
@@ -135,17 +163,37 @@ python take_screenshots.py
 3. **視覚的フィードバック**: 非活性ボタンは明確にグレーアウト、記録中は赤色表示
 4. **自動化**: カウントダウン後の自動クローズ、バックグラウンドスキャンで待ち時間を削減
 
-## ファイル名生成ルール
+## ROS2 Bag構造とファイル名生成ルール
 
-記録開始時にファイル名を生成（プレビューなし）：
+### Bag構造
+ROS2 bagはフォルダ構造で保存されます：
 ```
-YYYYMMDD_HHMMSS_<ラベル>.mcap
-例: 20251119_143025_廊下テスト.mcap
+my_bag/
+├── metadata.yaml
+└── my_bag_0.mcap
+```
+
+### フォルダ名生成ルール
+記録開始時にフォルダ名を生成（プレビューなし、.mcap拡張子なし）：
+```
+YYYYMMDD_HHMMSS_<ラベル>
+例: 20251119_143025_廊下テスト
+```
+
+### 圧縮ファイル命名規則
+圧縮時は元ファイルを保持し、新しいファイルを作成：
+```
+元: my_bag/
+圧縮後: my_bag_compressed_zstd/
 ```
 
 ## 注意事項
 
 - **ROS2依存**: `ros2 bag`コマンドが必須（record, info, convert）
+- **サポート形式**: MCAP形式のみサポート（DB3形式は非サポート）
+- **Bag構造**: ROS2 bagはフォルダ構造（`metadata.yaml`と`*_0.mcap`を含む）
+- **再帰検索**: 閲覧画面はサブフォルダも再帰的に検索してMCAPファイルを発見
 - **圧縮形式**: Zstdのみサポート（LZ4プラグインは未インストール環境が多い）
+- **圧縮方法**: 元ファイル保持、新ファイルを`*_compressed_zstd`として作成
 - **MCAP検出**: バイナリヘッダー（magic number）で圧縮形式を判定
-- **ファイル名とディレクトリ**: `.mcap`拡張子のディレクトリも存在するため、`Path.is_file()`と`Path.is_dir()`の両方をチェック
+- **ファイル名とディレクトリ**: `Path.is_file()`と`Path.is_dir()`の両方をチェック
