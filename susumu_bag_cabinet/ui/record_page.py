@@ -11,9 +11,14 @@ from PySide6.QtWidgets import (
     QLineEdit, QGroupBox, QMessageBox
 )
 from PySide6.QtCore import Signal, QTimer, Qt
-from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
-from susumu_bag_cabinet.utils.bag_utils import generate_filename
+from susumu_bag_cabinet.utils.bag_utils import generate_folder_name
+from susumu_bag_cabinet.ui.ui_helpers import (
+    DialogHelper, FontHelper, FileOperationHelper, ButtonStyleHelper
+)
+from susumu_bag_cabinet.ui.custom_widgets import (
+    LargeButton, CountdownDialog, IndeterminateProgressDialog
+)
 
 
 class RecordPage(QWidget):
@@ -49,10 +54,7 @@ class RecordPage(QWidget):
 
         # Title
         title = QLabel("記録する")
-        title_font = QFont()
-        title_font.setPointSize(20)
-        title_font.setBold(True)
-        title.setFont(title_font)
+        title.setFont(FontHelper.create_title_font())
         layout.addWidget(title)
 
         # Settings group
@@ -94,22 +96,19 @@ class RecordPage(QWidget):
         # Status
         status_layout.addWidget(QLabel("状態:"))
         self.status_label = QLabel("待機中")
-        status_font = QFont()
-        status_font.setPointSize(14)
-        status_font.setBold(True)
-        self.status_label.setFont(status_font)
+        self.status_label.setFont(FontHelper.create_status_font())
         status_layout.addWidget(self.status_label)
 
         # Elapsed time
         status_layout.addWidget(QLabel("経過時間:"))
         self.time_label = QLabel("00:00:00")
-        self.time_label.setFont(status_font)
+        self.time_label.setFont(FontHelper.create_status_font())
         status_layout.addWidget(self.time_label)
 
         # File size
         status_layout.addWidget(QLabel("ファイルサイズ:"))
         self.size_label = QLabel("-")
-        self.size_label.setFont(status_font)
+        self.size_label.setFont(FontHelper.create_status_font())
         status_layout.addWidget(self.size_label)
 
         status_group.setLayout(status_layout)
@@ -120,31 +119,13 @@ class RecordPage(QWidget):
         # Buttons
         button_layout = QHBoxLayout()
 
-        self.start_btn = QPushButton("記録開始")
-        self.start_btn.setMinimumHeight(60)
-        btn_font = QFont()
-        btn_font.setPointSize(14)
-        self.start_btn.setFont(btn_font)
+        self.start_btn = LargeButton("記録開始")
         self.start_btn.clicked.connect(self._start_recording)
-        self.start_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
         button_layout.addWidget(self.start_btn)
 
-        self.stop_btn = QPushButton("記録停止")
-        self.stop_btn.setMinimumHeight(60)
-        self.stop_btn.setFont(btn_font)
+        self.stop_btn = LargeButton("記録停止")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop_recording)
-        self.stop_btn.setStyleSheet("""
-            QPushButton:disabled {
-                background-color: #e0e0e0;
-                color: #9e9e9e;
-            }
-        """)
         button_layout.addWidget(self.stop_btn)
 
         layout.addLayout(button_layout)
@@ -167,16 +148,17 @@ class RecordPage(QWidget):
 
     def _start_recording(self):
         """Start recording."""
-        # Generate output path
+        # Generate output path (folder name only)
         folder = Path(self.config.get_bag_folder())
         folder.mkdir(parents=True, exist_ok=True)
 
         label = self.label_input.text().strip()
         robot_name = self.config.get_robot_name()
-        include_robot = self.config.get_filename_include_robot_name()
+        include_robot = self.config.get_folder_include_robot_name()
 
-        filename = generate_filename(label, robot_name, include_robot)
-        self.output_path = folder / f"{filename}.mcap"
+        # Generate folder name (without .mcap extension)
+        folder_name = generate_folder_name(label, robot_name, include_robot)
+        self.output_path = folder / folder_name
 
         # Start ros2 bag record
         cmd = [
@@ -201,7 +183,7 @@ class RecordPage(QWidget):
             self.status_label.setText("記録中")
             self.status_label.setStyleSheet("QLabel { color: red; }")
             # Show folder path without .mcap extension
-            folder_path = str(self.output_path).replace('.mcap', '')
+            folder_path = str(self.output_path)
             self.path_label.setText(folder_path)
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
@@ -212,7 +194,7 @@ class RecordPage(QWidget):
             self.update_timer.start(1000)  # Update every second
 
         except Exception as e:
-            QMessageBox.critical(
+            DialogHelper.show_error(
                 self,
                 "エラー",
                 f"記録の開始に失敗しました:\n{str(e)}"
@@ -252,34 +234,28 @@ class RecordPage(QWidget):
 
         # Update elapsed time
         elapsed = datetime.now() - self.start_time
-        hours = elapsed.seconds // 3600
-        minutes = (elapsed.seconds % 3600) // 60
-        seconds = elapsed.seconds % 60
-        self.time_label.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        time_str = FileOperationHelper.format_elapsed_time(elapsed.seconds)
+        self.time_label.setText(time_str)
 
-        # Update file size
+        # Update file size (ROS2 bag creates a folder structure)
         if self.output_path and self.output_path.exists():
-            size = self.output_path.stat().st_size
-            self.size_label.setText(self._format_size(size))
-        elif self.output_path:
-            # Check for directory format (older ROS2 bag format)
-            mcap_dir = Path(str(self.output_path).replace('.mcap', ''))
-            if mcap_dir.exists() and mcap_dir.is_dir():
-                size = sum(f.stat().st_size for f in mcap_dir.rglob('*') if f.is_file())
+            if self.output_path.is_dir():
+                # Sum up all files in the bag directory
+                size = sum(f.stat().st_size for f in self.output_path.rglob('*') if f.is_file())
+                self.size_label.setText(self._format_size(size))
+            elif self.output_path.is_file():
+                # Standalone file (less common)
+                size = self.output_path.stat().st_size
                 self.size_label.setText(self._format_size(size))
 
     def _format_size(self, size_bytes: int) -> str:
         """Format file size in human-readable format."""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024.0
-        return f"{size_bytes:.1f} PB"
+        return FileOperationHelper.format_size(size_bytes)
 
     def _on_home_clicked(self):
         """Handle home button click."""
         if self.recording:
-            QMessageBox.warning(
+            DialogHelper.show_warning(
                 self,
                 "警告",
                 "記録を停止してから戻ってください。"
@@ -309,35 +285,13 @@ class RecordPage(QWidget):
 
     def _show_completion_dialog(self):
         """Show completion dialog with auto-close countdown."""
-        # Create message box
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("記録完了")
-        msg_box.setIcon(QMessageBox.Icon.Information)
-
-        # Initial message
-        countdown = 3
-        msg_box.setText(f"記録が完了しました。\n{self.output_path}\n\n({countdown}秒後に自動的に閉じます)")
-
-        # Create timer for countdown
-        countdown_timer = QTimer()
-
-        def update_countdown():
-            nonlocal countdown
-            countdown -= 1
-            if countdown > 0:
-                msg_box.setText(f"記録が完了しました。\n{self.output_path}\n\n({countdown}秒後に自動的に閉じます)")
-            else:
-                countdown_timer.stop()
-                msg_box.accept()
-
-        countdown_timer.timeout.connect(update_countdown)
-        countdown_timer.start(1000)  # Update every second
-
-        # Show dialog (blocks until closed or auto-closed)
-        msg_box.exec()
-
-        # Make sure timer is stopped
-        countdown_timer.stop()
+        dialog = CountdownDialog(
+            "記録完了",
+            f"記録が完了しました。\n{self.output_path}",
+            countdown_seconds=3,
+            parent=self
+        )
+        dialog.show_with_countdown()
 
     def refresh_config(self):
         """Refresh the display based on current config."""

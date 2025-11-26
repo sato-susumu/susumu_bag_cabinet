@@ -2,9 +2,10 @@
 Home page UI for Susumu Bag Cabinet.
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
+from susumu_bag_cabinet.ui.custom_widgets import SquareButton
 
 
 class HomePage(QWidget):
@@ -37,35 +38,22 @@ class HomePage(QWidget):
 
         layout.addStretch()
 
-        # Button font
-        btn_font = QFont()
-        btn_font.setPointSize(18)
-
-        # Button size (square)
-        btn_size = 200
-
         # Horizontal layout for buttons
         button_layout = QHBoxLayout()
         button_layout.setSpacing(30)
 
         # Record button
-        self.record_btn = QPushButton("🟥 記録する")
-        self.record_btn.setFixedSize(btn_size, btn_size)
-        self.record_btn.setFont(btn_font)
+        self.record_btn = SquareButton("🟥 記録する", size=200, font_size=18)
         self.record_btn.clicked.connect(self.record_clicked)
         button_layout.addWidget(self.record_btn)
 
         # Browse button
-        self.browse_btn = QPushButton("🟦 記録をみる")
-        self.browse_btn.setFixedSize(btn_size, btn_size)
-        self.browse_btn.setFont(btn_font)
+        self.browse_btn = SquareButton("🟦 記録をみる", size=200, font_size=18)
         self.browse_btn.clicked.connect(self.browse_clicked)
         button_layout.addWidget(self.browse_btn)
 
         # Settings button
-        self.settings_btn = QPushButton("⚙ 設定をひらく")
-        self.settings_btn.setFixedSize(btn_size, btn_size)
-        self.settings_btn.setFont(btn_font)
+        self.settings_btn = SquareButton("⚙ 設定をひらく", size=200, font_size=18)
         self.settings_btn.clicked.connect(self.settings_clicked)
         button_layout.addWidget(self.settings_btn)
 

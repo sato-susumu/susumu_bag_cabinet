@@ -83,7 +83,7 @@ class Config:
         """Set the Foxglove Studio command."""
         self.config["foxglove_command"] = command
 
-    def get_filename_include_robot_name(self) -> bool:
+    def get_folder_include_robot_name(self) -> bool:
         """Get whether to include robot name in filename."""
         return self.config.get("filename_include_robot_name", False)
 

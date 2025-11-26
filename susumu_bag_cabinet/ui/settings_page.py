@@ -8,8 +8,13 @@ from PySide6.QtWidgets import (
     QLineEdit, QGroupBox, QCheckBox, QFileDialog, QMessageBox
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
+from susumu_bag_cabinet.ui.ui_helpers import (
+    DialogHelper, FontHelper, ButtonStyleHelper
+)
+from susumu_bag_cabinet.ui.custom_widgets import (
+    LargeButton, CountdownDialog
+)
 
 
 class SettingsPage(QWidget):
@@ -37,10 +42,7 @@ class SettingsPage(QWidget):
 
         # Title
         title = QLabel("設定")
-        title_font = QFont()
-        title_font.setPointSize(20)
-        title_font.setBold(True)
-        title.setFont(title_font)
+        title.setFont(FontHelper.create_title_font())
         layout.addWidget(title)
 
         # Bag folder group
@@ -128,17 +130,11 @@ class SettingsPage(QWidget):
         # Buttons
         button_layout = QHBoxLayout()
 
-        save_btn = QPushButton("保存してホームへ")
-        save_btn.setMinimumHeight(50)
-        btn_font = QFont()
-        btn_font.setPointSize(12)
-        save_btn.setFont(btn_font)
+        save_btn = LargeButton("保存してホームへ", min_height=50, font_size=12)
         save_btn.clicked.connect(self._save_and_go_home)
         button_layout.addWidget(save_btn)
 
-        cancel_btn = QPushButton("キャンセル")
-        cancel_btn.setMinimumHeight(50)
-        cancel_btn.setFont(btn_font)
+        cancel_btn = LargeButton("キャンセル", min_height=50, font_size=12)
         cancel_btn.clicked.connect(self._cancel)
         button_layout.addWidget(cancel_btn)
 
@@ -166,9 +162,9 @@ class SettingsPage(QWidget):
         include_robot = self.include_robot_checkbox.isChecked()
 
         if include_robot and robot_name:
-            preview = f"{robot_name}_YYYYMMDD_HHMMSS_<ラベル>.mcap"
+            preview = f"{robot_name}_YYYYMMDD_HHMMSS_<ラベル>"
         else:
-            preview = "YYYYMMDD_HHMMSS_<ラベル>.mcap"
+            preview = "YYYYMMDD_HHMMSS_<ラベル>"
 
         self.preview_label.setText(preview)
 
@@ -176,7 +172,7 @@ class SettingsPage(QWidget):
         """Test Foxglove Studio launch."""
         command = self.foxglove_input.text().strip()
         if not command:
-            QMessageBox.warning(
+            DialogHelper.show_warning(
                 self,
                 "警告",
                 "Foxgloveコマンドを入力してください。"
@@ -186,13 +182,13 @@ class SettingsPage(QWidget):
         try:
             # Try to launch Foxglove
             subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            QMessageBox.information(
+            DialogHelper.show_info(
                 self,
                 "成功",
                 "Foxglove Studioの起動コマンドが実行されました。"
             )
         except Exception as e:
-            QMessageBox.critical(
+            DialogHelper.show_error(
                 self,
                 "エラー",
                 f"Foxglove Studioの起動に失敗しました:\n{str(e)}"
@@ -208,7 +204,7 @@ class SettingsPage(QWidget):
             desktop_path = Path.home() / "デスクトップ"
 
         if not desktop_path.exists():
-            QMessageBox.warning(
+            DialogHelper.show_warning(
                 self,
                 "警告",
                 "デスクトップフォルダが見つかりません。"
@@ -259,13 +255,13 @@ Categories=Development;Utility;
             # Make .desktop file executable
             os.chmod(desktop_file_path, 0o755)
 
-            QMessageBox.information(
+            DialogHelper.show_info(
                 self,
                 "成功",
                 f"デスクトップにショートカットを作成しました。\n{desktop_file_path}"
             )
         except Exception as e:
-            QMessageBox.critical(
+            DialogHelper.show_error(
                 self,
                 "エラー",
                 f"ショートカットの作成に失敗しました:\n{str(e)}"
@@ -276,7 +272,7 @@ Categories=Development;Utility;
         # Validate folder path
         folder = self.folder_input.text().strip()
         if not folder:
-            QMessageBox.warning(
+            DialogHelper.show_warning(
                 self,
                 "警告",
                 "保存先フォルダを指定してください。"
@@ -318,34 +314,10 @@ Categories=Development;Utility;
 
     def _show_completion_dialog(self):
         """Show completion dialog with auto-close countdown."""
-        from PySide6.QtCore import QTimer
-
-        # Create message box
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("保存完了")
-        msg_box.setIcon(QMessageBox.Icon.Information)
-
-        # Initial message
-        countdown = 3
-        msg_box.setText(f"設定を保存しました。\n\n({countdown}秒後に自動的に閉じます)")
-
-        # Create timer for countdown
-        countdown_timer = QTimer()
-
-        def update_countdown():
-            nonlocal countdown
-            countdown -= 1
-            if countdown > 0:
-                msg_box.setText(f"設定を保存しました。\n\n({countdown}秒後に自動的に閉じます)")
-            else:
-                countdown_timer.stop()
-                msg_box.accept()
-
-        countdown_timer.timeout.connect(update_countdown)
-        countdown_timer.start(1000)  # Update every second
-
-        # Show dialog (blocks until closed or auto-closed)
-        msg_box.exec()
-
-        # Make sure timer is stopped
-        countdown_timer.stop()
+        dialog = CountdownDialog(
+            "保存完了",
+            "設定を保存しました。",
+            countdown_seconds=3,
+            parent=self
+        )
+        dialog.show_with_countdown()
