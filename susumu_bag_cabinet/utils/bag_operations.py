@@ -27,16 +27,23 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
         if progress_callback:
             progress_callback("修復を開始しています...")
 
-        # For MCAP files, try to reindex
+        # MCAPファイルの場合、再インデックスを試みる
         if bag_path.endswith('.mcap') or (path_obj.is_dir() and list(path_obj.glob('*.mcap'))):
-            # ROS2 bag doesn't have a built-in repair command for MCAP
-            # We can try to convert to a new bag which will skip corrupted messages
-            backup_path = str(path_obj) + "_backup"
+            # ROS2 bagにはMCAP用の組み込み修復コマンドがない
+            # 破損したメッセージをスキップして新しいbagに変換する
+
+            # 重複しないバックアップパスを作成
+            backup_base = str(path_obj) + "_backup"
+            backup_path = backup_base
+            counter = 1
+            while Path(backup_path).exists():
+                backup_path = f"{backup_base}_{counter}"
+                counter += 1
 
             if progress_callback:
                 progress_callback("バックアップを作成しています...")
 
-            # Create backup
+            # バックアップを作成
             if path_obj.is_file():
                 import shutil
                 shutil.copy2(bag_path, backup_path)
@@ -47,14 +54,20 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
             if progress_callback:
                 progress_callback("修復を試行しています...")
 
-            # Try to read and rewrite the bag
-            # This will skip corrupted messages
+            # bagを読み込んで再書き込み
+            # これにより破損したメッセージがスキップされる
             import tempfile
             import yaml
 
-            output_path = str(path_obj) + "_repaired"
+            # 重複しない出力パスを作成
+            output_base = str(path_obj) + "_repaired"
+            output_path = output_base
+            counter = 1
+            while Path(output_path).exists():
+                output_path = f"{output_base}_{counter}"
+                counter += 1
 
-            # Create YAML config
+            # YAML設定を作成
             config = {
                 'output_bags': [
                     {
@@ -71,12 +84,8 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
                 config_file = f.name
 
             try:
-                # Detect input storage
+                # 入力ストレージは常にMCAP（DB3は非サポート）
                 input_storage = 'mcap'
-                if Path(bag_path).is_dir() and list(Path(bag_path).glob('*.db3')):
-                    input_storage = 'sqlite3'
-                elif bag_path.endswith('.db3'):
-                    input_storage = 'sqlite3'
 
                 cmd = [
                     'ros2', 'bag', 'convert',
@@ -108,12 +117,12 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
                 except:
                     pass
 
-        # For DB3 bags
+        # DB3 bag（現在は非サポート）
         elif path_obj.is_dir() and list(path_obj.glob('*.db3')):
             if progress_callback:
                 progress_callback("DB3形式の修復を試行しています...")
 
-            # Try to reindex using sqlite
+            # sqliteを使用した再インデックス
             return False, "DB3形式の自動修復は未実装です。手動で sqlite3 を使って修復してください。"
 
         else:
@@ -126,7 +135,8 @@ def repair_bag(bag_path: str, progress_callback: Optional[Callable[[str], None]]
 def compress_bag(bag_path: str, compression: str = "zstd",
                  progress_callback: Optional[Callable[[str], None]] = None) -> tuple[bool, str]:
     """
-    Compress a bag file.
+    Compress a bag file using mcap compress command.
+    Deletes the original directory/file and renames the compressed file to the original name.
 
     Args:
         bag_path: Path to the bag file or directory
@@ -136,97 +146,94 @@ def compress_bag(bag_path: str, compression: str = "zstd",
     Returns:
         Tuple of (success: bool, message: str)
     """
-    import tempfile
-    import yaml
+    import shutil
 
     try:
         if progress_callback:
             progress_callback("圧縮を開始しています...")
 
-        # Get output path
-        bag_name = Path(bag_path).stem if Path(bag_path).is_file() else Path(bag_path).name
-        output_dir = Path(bag_path).parent
-        output_path = output_dir / f"{bag_name}_compressed_{compression}"
+        bag_path_obj = Path(bag_path)
+        is_directory = bag_path_obj.is_dir()
 
-        # Create YAML config file for ros2 bag convert
-        config = {
-            'output_bags': [
-                {
-                    'uri': str(output_path),
-                    'storage_id': 'mcap',
-                    'compression_format': compression,
-                    'compression_mode': 'file'
-                }
-            ]
-        }
+        # Find the actual .mcap file
+        mcap_file = None
+        if is_directory:
+            # Find .mcap files in directory (ROS2 bag format)
+            mcap_files = [f for f in bag_path_obj.iterdir()
+                          if f.is_file() and f.suffix == '.mcap']
+            if mcap_files:
+                mcap_files.sort()
+                mcap_file = mcap_files[0]
+        elif bag_path_obj.is_file() and '.mcap' in bag_path_obj.name:
+            mcap_file = bag_path_obj
 
-        # Write config to temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(config, f)
-            config_file = f.name
+        if not mcap_file:
+            return False, "MCAPファイルが見つかりません"
 
-        try:
-            # Detect input storage format
-            input_storage = 'mcap'  # Default
-            if Path(bag_path).is_dir():
-                if list(Path(bag_path).glob('*.db3')):
-                    input_storage = 'sqlite3'
-                elif (Path(bag_path) / 'metadata.yaml').exists():
-                    # Check what storage is used in the bag directory
-                    mcap_files = list(Path(bag_path).glob('*.mcap'))
-                    db3_files = list(Path(bag_path).glob('*.db3'))
-                    if mcap_files:
-                        input_storage = 'mcap'
-                    elif db3_files:
-                        input_storage = 'sqlite3'
-            elif bag_path.endswith('.db3'):
-                input_storage = 'sqlite3'
+        # Create temporary output filename in parent directory to avoid deletion
+        # when removing the source directory
+        temp_output_file = bag_path_obj.parent / f"_compress_tmp_{bag_path_obj.name}.{compression}"
 
-            cmd = [
-                'ros2', 'bag', 'convert',
-                '-i', bag_path, input_storage,
-                '-o', config_file
-            ]
+        if progress_callback:
+            progress_callback(f"圧縮中: {mcap_file.name}")
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=600  # 10 minutes timeout
-            )
+        # Use mcap compress command
+        cmd = [
+            'mcap', 'compress',
+            str(mcap_file),
+            '-o', str(temp_output_file),
+            '--compression', compression
+        ]
 
-            if result.returncode == 0:
-                if progress_callback:
-                    progress_callback("圧縮が完了しました。ファイルを置き換えています...")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minutes timeout
+        )
 
-                # Rename original file to backup
-                import shutil
-                bag_path_obj = Path(bag_path)
-                if bag_path_obj.is_file():
-                    backup_path = bag_path_obj.parent / f"{bag_path_obj.stem}_uncompressed{bag_path_obj.suffix}"
-                else:
-                    backup_path = Path(str(bag_path) + "_uncompressed")
+        if result.returncode != 0:
+            error_msg = result.stderr if result.stderr else result.stdout
+            # Clean up temporary file if it exists
+            if temp_output_file.exists():
+                temp_output_file.unlink()
+            return False, f"mcap compressコマンドが失敗しました:\nコマンド: {' '.join(cmd)}\nエラー: {error_msg}"
 
-                # Move original to backup
-                shutil.move(str(bag_path), str(backup_path))
+        # Check if output file was created
+        if not temp_output_file.exists():
+            return False, f"圧縮ファイルが作成されませんでした:\n期待されるパス: {temp_output_file}"
 
-                # Rename compressed file to original name
-                shutil.move(str(output_path), str(bag_path))
+        if progress_callback:
+            progress_callback("圧縮が完了しました。元のファイルを削除して名前を変更しています...")
 
-                if progress_callback:
-                    progress_callback("完了しました")
+        # Get file sizes for comparison before deletion
+        original_size = mcap_file.stat().st_size
+        compressed_size = temp_output_file.stat().st_size
+        ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
 
-                return True, f"圧縮完了:\n元ファイル → {backup_path.name}\n圧縮版 → {bag_path_obj.name}"
-            else:
-                error_msg = result.stderr if result.stderr else result.stdout
-                return False, f"圧縮に失敗しました:\n{error_msg}"
+        # Determine final output path
+        if is_directory:
+            # If original was a directory, create new name based on directory
+            final_output = bag_path_obj.parent / f"{bag_path_obj.name}.mcap.{compression}"
+        else:
+            # If original was a file, replace it with compressed version
+            # Remove .mcap extension and add .mcap.zstd
+            final_output = mcap_file.parent / f"{mcap_file.stem}.mcap.{compression}"
 
-        finally:
-            # Clean up temp file
-            try:
-                Path(config_file).unlink()
-            except:
-                pass
+        # Delete original (directory or file)
+        if is_directory:
+            shutil.rmtree(bag_path_obj)
+        else:
+            mcap_file.unlink()
+
+        # Move compressed file to final name (use shutil.move for cross-directory moves)
+        shutil.move(str(temp_output_file), str(final_output))
+
+        if progress_callback:
+            progress_callback("完了")
+
+        from susumu_bag_cabinet.utils.bag_utils import format_size
+        return True, f"圧縮完了:\n元のサイズ: {format_size(original_size)}\n圧縮後: {format_size(compressed_size)}\n圧縮率: {ratio:.1f}%\n\n新しいファイル名: {final_output.name}"
 
     except subprocess.TimeoutExpired:
         return False, "圧縮がタイムアウトしました"
