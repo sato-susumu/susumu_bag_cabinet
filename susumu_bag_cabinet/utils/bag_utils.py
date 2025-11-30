@@ -76,18 +76,24 @@ def get_bag_info(bag_path: str) -> Dict[str, Any]:
         elif path_obj.is_dir():
             result["size"] = sum(f.stat().st_size for f in path_obj.rglob('*') if f.is_file())
 
-    # 形式を検出（MCAPのみ）
+    # 形式を検出（MCAP と SQLite3/DB3）
     if '.mcap' in bag_path:
         # .mcap, .mcap.zstd, .mcap.lz4 などを全て認識
         result["format"] = "MCAP"
+    elif '.db3' in bag_path:
+        result["format"] = "SQLite3"
     elif path_obj.is_dir():
         # ディレクトリ内のファイルを確認
         has_metadata = (path_obj / 'metadata.yaml').exists()
         mcap_files = [f for f in path_obj.iterdir()
                       if f.is_file() and '.mcap' in f.name]
+        db3_files = [f for f in path_obj.iterdir()
+                     if f.is_file() and f.suffix == '.db3']
 
-        if has_metadata or mcap_files:
+        if mcap_files:
             result["format"] = "MCAP"
+        elif db3_files or has_metadata:
+            result["format"] = "SQLite3"
 
     # ros2 bag infoを使用してメタデータを取得
     try:
@@ -277,7 +283,7 @@ def generate_folder_name(label: str = "", robot_name: str = "", include_robot: b
 
 def scan_bag_folder(folder_path: str) -> list:
     """
-    Scan a folder recursively for MCAP bag files.
+    Scan a folder recursively for ROS2 bag files (MCAP and SQLite3/DB3 formats).
 
     Args:
         folder_path: Path to the folder to scan
@@ -310,21 +316,38 @@ def scan_bag_folder(folder_path: str) -> list:
                     bag_files.append(file_path)
                     seen.add(file_path)
 
-    # 方法2: metadata.yamlを含むすべてのディレクトリを検索
-    # これにより、.mcap拡張子のないROS2 bagディレクトリ（圧縮後など）も検出される
+    # 方法2: すべての.db3ファイルを再帰的に検索（SQLite3形式）
+    for p in folder.rglob('*.db3'):
+        if p.is_file():
+            # これがROS2 bagディレクトリの一部かどうか確認
+            parent_dir = p.parent
+            if (parent_dir / 'metadata.yaml').exists():
+                # これはROS2 bagディレクトリ - ディレクトリ自体を追加
+                dir_path = str(parent_dir)
+                if dir_path not in seen:
+                    bag_files.append(dir_path)
+                    seen.add(dir_path)
+            else:
+                # スタンドアロンDB3ファイル
+                file_path = str(p)
+                if file_path not in seen:
+                    bag_files.append(file_path)
+                    seen.add(file_path)
+
+    # 方法3: metadata.yamlを含むすべてのディレクトリを検索
+    # これにより、ROS2 bagディレクトリを確実に検出
     for metadata_file in folder.rglob('metadata.yaml'):
         if metadata_file.is_file():
             bag_dir = metadata_file.parent
             dir_path = str(bag_dir)
             if dir_path not in seen:
-                # このディレクトリ内に.mcapファイルがあるか確認
-                # （.mcap.zstdのような圧縮ファイルでもOK）
-                has_mcap_files = any(
-                    f.suffix == '.mcap' or '.mcap' in f.name
+                # このディレクトリ内に.mcapまたは.db3ファイルがあるか確認
+                has_bag_files = any(
+                    f.suffix == '.mcap' or '.mcap' in f.name or f.suffix == '.db3'
                     for f in bag_dir.iterdir()
                     if f.is_file()
                 )
-                if has_mcap_files:
+                if has_bag_files:
                     bag_files.append(dir_path)
                     seen.add(dir_path)
 

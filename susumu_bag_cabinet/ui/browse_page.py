@@ -149,7 +149,7 @@ class BrowsePage(QWidget):
         self.delete_btn.setStyleSheet("""
             QPushButton {
                 background-color: #ff6b6b;
-                color: white;
+                color: black;
             }
             QPushButton:disabled {
                 background-color: #e0e0e0;
@@ -273,27 +273,27 @@ class BrowsePage(QWidget):
                 relative_dir = file_path_obj.relative_to(base_folder)
 
                 if file_path_obj.is_dir():
-                    # Find the first .mcap or .mcap.* file in the directory
-                    mcap_files = [f for f in file_path_obj.iterdir()
-                                  if f.is_file() and '.mcap' in f.name]
-                    if mcap_files:
+                    # Find the first .mcap or .db3 file in the directory
+                    bag_files = [f for f in file_path_obj.iterdir()
+                                  if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                    if bag_files:
                         # Sort to get consistent ordering
-                        mcap_files.sort()
-                        # Combine relative directory path with .mcap filename
-                        display_name = str(relative_dir / mcap_files[0].name)
+                        bag_files.sort()
+                        # Combine relative directory path with bag filename
+                        display_name = str(relative_dir / bag_files[0].name)
                     else:
-                        # Fallback to directory name if no .mcap file found
+                        # Fallback to directory name if no bag file found
                         display_name = str(relative_dir)
                 else:
                     display_name = str(relative_dir)
             except ValueError:
                 # If file is not in base folder, use absolute path
                 if file_path_obj.is_dir():
-                    mcap_files = [f for f in file_path_obj.iterdir()
-                                  if f.is_file() and '.mcap' in f.name]
-                    if mcap_files:
-                        mcap_files.sort()
-                        display_name = str(file_path_obj / mcap_files[0].name)
+                    bag_files = [f for f in file_path_obj.iterdir()
+                                  if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                    if bag_files:
+                        bag_files.sort()
+                        display_name = str(file_path_obj / bag_files[0].name)
                     else:
                         display_name = str(file_path_obj)
                 else:
@@ -335,26 +335,26 @@ class BrowsePage(QWidget):
             relative_dir = file_path_obj.relative_to(base_folder)
 
             if file_path_obj.is_dir():
-                # Find the first .mcap or .mcap.* file in the directory
-                mcap_files = [f for f in file_path_obj.iterdir()
-                              if f.is_file() and '.mcap' in f.name]
-                if mcap_files:
-                    mcap_files.sort()
-                    # Combine relative directory path with .mcap filename
-                    display_name = str(relative_dir / mcap_files[0].name)
+                # Find the first .mcap or .db3 file in the directory
+                bag_files = [f for f in file_path_obj.iterdir()
+                              if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                if bag_files:
+                    bag_files.sort()
+                    # Combine relative directory path with bag filename
+                    display_name = str(relative_dir / bag_files[0].name)
                 else:
-                    # Fallback to directory name if no .mcap file found
+                    # Fallback to directory name if no bag file found
                     display_name = str(relative_dir)
             else:
                 display_name = str(relative_dir)
         except ValueError:
             # If file is not in base folder, use absolute path
             if file_path_obj.is_dir():
-                mcap_files = [f for f in file_path_obj.iterdir()
-                              if f.is_file() and '.mcap' in f.name]
-                if mcap_files:
-                    mcap_files.sort()
-                    display_name = str(file_path_obj / mcap_files[0].name)
+                bag_files = [f for f in file_path_obj.iterdir()
+                              if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                if bag_files:
+                    bag_files.sort()
+                    display_name = str(file_path_obj / bag_files[0].name)
                 else:
                     display_name = str(file_path_obj)
             else:
@@ -420,14 +420,14 @@ class BrowsePage(QWidget):
                             # Get relative path of the directory/file
                             relative_dir = file_path_obj.relative_to(base_folder)
 
-                            # Check if it's a directory with .mcap files
+                            # Check if it's a directory with bag files (.mcap or .db3)
                             if file_path_obj.is_dir():
-                                mcap_files = [f for f in file_path_obj.iterdir()
-                                              if f.is_file() and '.mcap' in f.name]
-                                if mcap_files:
-                                    mcap_files.sort()
-                                    # Compare with relative path + mcap filename
-                                    check_name = str(relative_dir / mcap_files[0].name)
+                                bag_files = [f for f in file_path_obj.iterdir()
+                                              if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                                if bag_files:
+                                    bag_files.sort()
+                                    # Compare with relative path + bag filename
+                                    check_name = str(relative_dir / bag_files[0].name)
                                     if check_name == display_name:
                                         selected.append(file_path)
                                         break
@@ -442,11 +442,11 @@ class BrowsePage(QWidget):
                         except ValueError:
                             # Handle absolute paths
                             if file_path_obj.is_dir():
-                                mcap_files = [f for f in file_path_obj.iterdir()
-                                              if f.is_file() and '.mcap' in f.name]
-                                if mcap_files:
-                                    mcap_files.sort()
-                                    check_name = str(file_path_obj / mcap_files[0].name)
+                                bag_files = [f for f in file_path_obj.iterdir()
+                                              if f.is_file() and ('.mcap' in f.name or f.suffix == '.db3')]
+                                if bag_files:
+                                    bag_files.sort()
+                                    check_name = str(file_path_obj / bag_files[0].name)
                                     if check_name == display_name:
                                         selected.append(file_path)
                                         break
@@ -517,7 +517,7 @@ class BrowsePage(QWidget):
                 )
 
     def _show_info(self):
-        """Show mcap info for selected file."""
+        """Show bag info for selected file."""
         selected = self._get_selected_files()
 
         if len(selected) == 0:
@@ -531,41 +531,72 @@ class BrowsePage(QWidget):
         file_path = selected[0]
         path_obj = Path(file_path)
 
-        # Find the actual .mcap file
-        mcap_file = None
+        # Determine file type and find the actual bag file
+        bag_file = None
+        is_mcap = False
+        is_db3 = False
+
         if path_obj.is_dir():
-            # Find .mcap or .mcap.* files in directory
+            # Find .mcap or .db3 files in directory
             mcap_files = [f for f in path_obj.iterdir()
                           if f.is_file() and '.mcap' in f.name and f.name != 'metadata.yaml']
+            db3_files = [f for f in path_obj.iterdir()
+                         if f.is_file() and f.suffix == '.db3']
+
             if mcap_files:
                 mcap_files.sort()
-                mcap_file = mcap_files[0]
+                bag_file = mcap_files[0]
+                is_mcap = True
+            elif db3_files:
+                db3_files.sort()
+                bag_file = db3_files[0]
+                is_db3 = True
         elif path_obj.is_file():
-            mcap_file = path_obj
+            bag_file = path_obj
+            if '.mcap' in path_obj.name:
+                is_mcap = True
+            elif path_obj.suffix == '.db3':
+                is_db3 = True
 
-        if not mcap_file:
+        if not bag_file:
             QMessageBox.warning(
                 self,
                 "警告",
-                "MCAPファイルが見つかりません。"
+                "Bagファイルが見つかりません。"
             )
             return
 
-        # Run mcap info command
+        # Run appropriate info command based on file type
         try:
-            result = subprocess.run(
-                ['mcap', 'info', str(mcap_file)],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            if is_mcap:
+                # Use mcap info for MCAP files
+                result = subprocess.run(
+                    ['mcap', 'info', str(bag_file)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                dialog_title = f"MCAP Info - {bag_file.name}"
+            else:
+                # Use ros2 bag info for DB3 files or directories
+                target_path = str(path_obj) if path_obj.is_dir() else str(bag_file.parent)
+                result = subprocess.run(
+                    ['ros2', 'bag', 'info', target_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                dialog_title = f"Bag Info - {bag_file.name}"
 
             if result.returncode == 0:
                 output = result.stdout
             else:
                 output = f"エラーが発生しました:\n{result.stderr}"
-        except FileNotFoundError:
-            output = "mcapコマンドが見つかりません。\nmcap CLIツールをインストールしてください。"
+        except FileNotFoundError as e:
+            if is_mcap:
+                output = "mcapコマンドが見つかりません。\nmcap CLIツールをインストールしてください。"
+            else:
+                output = "ros2コマンドが見つかりません。\nROS2環境をセットアップしてください。"
         except subprocess.TimeoutExpired:
             output = "コマンドがタイムアウトしました。"
         except Exception as e:
@@ -573,7 +604,7 @@ class BrowsePage(QWidget):
 
         # Show result in dialog
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"MCAP Info - {mcap_file.name}")
+        dialog.setWindowTitle(dialog_title)
         dialog.resize(800, 600)
 
         layout = QVBoxLayout()
@@ -700,14 +731,17 @@ class BrowsePage(QWidget):
 
         try:
             # Open Foxglove with the bag file path directly
-            # Foxglove can handle both .mcap files and directory-based bags
+            # Foxglove can handle both .mcap files and .db3 files
             path_obj = Path(file_path)
-            mcap_file_to_open = None
+            bag_file_to_open = None
 
             # If it's a .mcap file, use it directly
             if path_obj.is_file() and path_obj.suffix == '.mcap':
-                mcap_file_to_open = str(path_obj)
-            # If it's a directory, check for .mcap files inside
+                bag_file_to_open = str(path_obj)
+            # If it's a .db3 file, use it directly
+            elif path_obj.is_file() and path_obj.suffix == '.db3':
+                bag_file_to_open = str(path_obj)
+            # If it's a directory, check for bag files inside
             elif path_obj.is_dir():
                 # Look for .mcap file in directory (including nested patterns like *_0.mcap)
                 mcap_files = list(path_obj.glob('*.mcap'))
@@ -715,10 +749,15 @@ class BrowsePage(QWidget):
                 if not mcap_files:
                     mcap_files = list(path_obj.glob('*_0.mcap'))
 
+                # Look for .db3 files
+                db3_files = list(path_obj.glob('*.db3'))
+
                 if mcap_files:
-                    mcap_file_to_open = str(mcap_files[0])
+                    bag_file_to_open = str(mcap_files[0])
+                elif db3_files:
+                    bag_file_to_open = str(db3_files[0])
                 else:
-                    # No .mcap file found - check if compressed files exist
+                    # No bag file found - check if compressed files exist
                     compressed_files = list(path_obj.glob('*.mcap.zstd')) + list(path_obj.glob('*.mcap.lz4'))
                     if compressed_files:
                         raise FileNotFoundError(
@@ -727,21 +766,21 @@ class BrowsePage(QWidget):
                             f"圧縮ファイル: {compressed_files[0].name}"
                         )
                     else:
-                        # No .mcap file found - show helpful error
+                        # No bag file found - show helpful error
                         all_files = list(path_obj.glob('*'))
                         file_list = ', '.join([f.name for f in all_files[:5]])
                         raise FileNotFoundError(
-                            f"ディレクトリ内に開けるMCAPファイルが見つかりません。\n"
+                            f"ディレクトリ内に開けるBagファイルが見つかりません。\n"
                             f"ディレクトリ: {path_obj}\n"
                             f"見つかったファイル: {file_list}"
                         )
             else:
                 raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
 
-            # Launch Foxglove with the MCAP file
-            if mcap_file_to_open:
-                print(f"Opening Foxglove with: {command} {mcap_file_to_open}")  # Debug
-                subprocess.Popen([command, mcap_file_to_open])
+            # Launch Foxglove with the bag file
+            if bag_file_to_open:
+                print(f"Opening Foxglove with: {command} {bag_file_to_open}")  # Debug
+                subprocess.Popen([command, bag_file_to_open])
 
         except Exception as e:
             QMessageBox.critical(

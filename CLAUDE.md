@@ -35,7 +35,7 @@ Susumu Bag CabinetはROS2のbagファイル（MCAP/DB3形式）を管理する�
 
 1. **HomePage** (`ui/home_page.py`) - 3つの正方形ボタン（記録する、記録をみる、設定をひらく）
 2. **RecordPage** (`ui/record_page.py`) - ROS2 bag記録の開始/停止、リアルタイムステータス表示
-3. **BrowsePage** (`ui/browse_page.py`) - bagファイル一覧、圧縮/修復/削除/Foxglove再生機能
+3. **BrowsePage** (`ui/browse_page.py`) - bagファイル一覧、修復/削除/Foxglove再生機能
 4. **SettingsPage** (`ui/settings_page.py`) - 保存先フォルダ、ロボット名などの設定
 
 各ページは`Signal`を使ってページ遷移を通知し、`MainWindow`が`QStackedWidget.setCurrentIndex()`でページを切り替えます。
@@ -59,12 +59,11 @@ Susumu Bag CabinetはROS2のbagファイル（MCAP/DB3形式）を管理する�
 **bag_utils.py**:
 - メタデータ取得、MCAP圧縮検出（バイナリヘッダー検査）
 - `generate_folder_name()`: フォルダ名を生成（.mcap拡張子なし）
-- `scan_bag_folder()`: サブフォルダも再帰的に検索してMCAPファイルを発見（MCAP形式のみサポート）
+- `scan_bag_folder()`: サブフォルダも再帰的に検索してMCAP/DB3ファイルを発見
+- MCAP形式とSQLite3/DB3形式の両方をサポート
 
 **bag_operations.py**:
-- 圧縮・修復機能（`ros2 bag convert`を使用、YAMLコンフィグファイル経由）
-- `compress_bag()`: 元ファイルを保持し、新しい圧縮ファイル（`*_compressed_zstd`）を作成
-- MCAP形式のみサポート（DB3形式は非サポート）
+- 修復機能（`ros2 bag convert`を使用、YAMLコンフィグファイル経由）
 
 ## 重要な実装パターン
 
@@ -83,7 +82,7 @@ button.setStyleSheet("""
 
 ### プログレスダイアログ（不定形）
 
-長時間処理（圧縮・修復・削除）では、パーセント表示ではなく円形インジケーターを使用：
+長時間処理（修復・削除）では、パーセント表示ではなく円形インジケーターを使用：
 
 ```python
 progress = QProgressDialog("処理中...", None, 0, 0, self)  # 0 to 0 = indeterminate
@@ -107,7 +106,8 @@ def _show_completion_dialog(self):
 
 bagファイルを直接Foxgloveで開きます：
 - MCAPファイル: `foxglove-studio /path/to/file.mcap`
-- ディレクトリ形式bag: 内部の`*_0.mcap`ファイルを検索して渡す
+- DB3ファイル: `foxglove-studio /path/to/file.db3`
+- ディレクトリ形式bag: 内部の`*_0.mcap`または`.db3`ファイルを検索して渡す
 - 圧縮ファイル（`.mcap.zstd`）は検出してエラーメッセージを表示
 
 ### テーブル行クリック選択
@@ -168,9 +168,15 @@ python take_screenshots.py
 ### Bag構造
 ROS2 bagはフォルダ構造で保存されます：
 ```
+# MCAP形式
 my_bag/
 ├── metadata.yaml
 └── my_bag_0.mcap
+
+# SQLite3/DB3形式（旧形式）
+my_bag/
+├── metadata.yaml
+└── my_bag_0.db3
 ```
 
 ### フォルダ名生成ルール
@@ -180,20 +186,12 @@ YYYYMMDD_HHMMSS_<ラベル>
 例: 20251119_143025_廊下テスト
 ```
 
-### 圧縮ファイル命名規則
-圧縮時は元ファイルを保持し、新しいファイルを作成：
-```
-元: my_bag/
-圧縮後: my_bag_compressed_zstd/
-```
-
 ## 注意事項
 
 - **ROS2依存**: `ros2 bag`コマンドが必須（record, info, convert）
-- **サポート形式**: MCAP形式のみサポート（DB3形式は非サポート）
-- **Bag構造**: ROS2 bagはフォルダ構造（`metadata.yaml`と`*_0.mcap`を含む）
-- **再帰検索**: 閲覧画面はサブフォルダも再帰的に検索してMCAPファイルを発見
-- **圧縮形式**: Zstdのみサポート（LZ4プラグインは未インストール環境が多い）
-- **圧縮方法**: 元ファイル保持、新ファイルを`*_compressed_zstd`として作成
+- **サポート形式**: MCAP形式とSQLite3/DB3形式の両方をサポート
+- **Bag構造**: ROS2 bagはフォルダ構造（`metadata.yaml`と`*_0.mcap`または`*_0.db3`を含む）
+- **再帰検索**: 閲覧画面はサブフォルダも再帰的に検索してMCAP/DB3ファイルを発見
 - **MCAP検出**: バイナリヘッダー（magic number）で圧縮形式を判定
 - **ファイル名とディレクトリ**: `Path.is_file()`と`Path.is_dir()`の両方をチェック
+- **記録形式**: 記録ページでMCAPフォーマットを使用するかどうか選択可能（デフォルトはOFF＝SQLite3形式）

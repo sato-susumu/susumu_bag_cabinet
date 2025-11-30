@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QLineEdit, QGroupBox, QMessageBox
+    QLineEdit, QGroupBox, QMessageBox, QCheckBox
 )
 from PySide6.QtCore import Signal, QTimer, Qt
 from susumu_bag_cabinet.utils.config import Config
@@ -76,6 +76,14 @@ class RecordPage(QWidget):
         self.label_input.setPlaceholderText("例: 廊下テスト、屋外走行1")
         label_layout.addWidget(self.label_input, 1)
         settings_layout.addLayout(label_layout)
+
+        # MCAP format checkbox
+        mcap_layout = QHBoxLayout()
+        self.mcap_checkbox = QCheckBox("MCAPフォーマットを使用する")
+        self.mcap_checkbox.setChecked(False)  # デフォルトはOFF
+        mcap_layout.addWidget(self.mcap_checkbox)
+        mcap_layout.addStretch()
+        settings_layout.addLayout(mcap_layout)
 
         # Save path (will be shown when recording)
         path_layout = QHBoxLayout()
@@ -164,9 +172,12 @@ class RecordPage(QWidget):
         cmd = [
             'ros2', 'bag', 'record',
             '-a',  # Record all topics
-            '--storage', 'mcap',
             '-o', str(self.output_path)
         ]
+
+        # MCAPフォーマットを使用する場合のみ--storageオプションを追加
+        if self.mcap_checkbox.isChecked():
+            cmd.extend(['--storage', 'mcap'])
 
         try:
             self.process = subprocess.Popen(
@@ -189,6 +200,7 @@ class RecordPage(QWidget):
             self.stop_btn.setEnabled(True)
             self.home_btn.setEnabled(False)
             self.label_input.setEnabled(False)
+            self.mcap_checkbox.setEnabled(False)
 
             # Start update timer
             self.update_timer.start(1000)  # Update every second
@@ -223,6 +235,7 @@ class RecordPage(QWidget):
         self.stop_btn.setEnabled(False)
         self.home_btn.setEnabled(True)
         self.label_input.setEnabled(True)
+        self.mcap_checkbox.setEnabled(True)
 
         # Show completion message with auto-close countdown
         self._show_completion_dialog()
