@@ -139,6 +139,10 @@ class BrowsePage(QWidget):
         self.foxglove_btn.clicked.connect(self._play_in_foxglove)
         button_layout2.addWidget(self.foxglove_btn)
 
+        self.play_btn = LargeButton("ros2 bag play", min_height=40, font_size=12)
+        self.play_btn.clicked.connect(self._play_in_ros2)
+        button_layout2.addWidget(self.play_btn)
+
         layout.addLayout(button_layout2)
 
         # Delete button (in a separate row for safety)
@@ -914,6 +918,95 @@ class BrowsePage(QWidget):
                 f"Foxglove Studioの起動に失敗しました:\n{str(e)}"
             )
 
+    def _play_in_ros2(self):
+        """Play selected file using ros2 bag play."""
+        selected = self._get_selected_files()
+
+        if len(selected) == 0:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        if len(selected) > 1:
+            QMessageBox.warning(
+                self,
+                "警告",
+                "ファイルを1つだけ選択してください。"
+            )
+            return
+
+        file_path = selected[0]
+
+        try:
+            path_obj = Path(file_path)
+            bag_path = None
+
+            # ros2 bag play requires the bag directory path (containing metadata.yaml)
+            if path_obj.is_dir():
+                # Check if metadata.yaml exists
+                if (path_obj / "metadata.yaml").exists():
+                    bag_path = str(path_obj)
+                else:
+                    raise FileNotFoundError(
+                        f"metadata.yamlが見つかりません。\n"
+                        f"有効なROS2 bagディレクトリではない可能性があります。"
+                    )
+            elif path_obj.is_file():
+                # Use parent directory (bag directory)
+                parent = path_obj.parent
+                if (parent / "metadata.yaml").exists():
+                    bag_path = str(parent)
+                else:
+                    raise FileNotFoundError(
+                        f"metadata.yamlが見つかりません。\n"
+                        f"有効なROS2 bagディレクトリではない可能性があります。"
+                    )
+            else:
+                raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
+
+            if bag_path:
+                # Launch ros2 bag play in a new terminal
+                print(f"Running: ros2 bag play {bag_path}")  # Debug
+                # Try common terminal emulators
+                terminal_commands = [
+                    ['gnome-terminal', '--', 'ros2', 'bag', 'play', bag_path],
+                    ['xterm', '-e', 'ros2', 'bag', 'play', bag_path],
+                    ['konsole', '-e', 'ros2', 'bag', 'play', bag_path],
+                ]
+
+                launched = False
+                for cmd in terminal_commands:
+                    try:
+                        subprocess.Popen(cmd)
+                        launched = True
+                        break
+                    except FileNotFoundError:
+                        continue
+
+                if not launched:
+                    # Fallback: run directly (output won't be visible)
+                    subprocess.Popen(['ros2', 'bag', 'play', bag_path])
+                    QMessageBox.information(
+                        self,
+                        "再生開始",
+                        f"ros2 bag playを開始しました。\n\n"
+                        f"ターミナルエミュレータが見つからなかったため、"
+                        f"バックグラウンドで実行しています。\n"
+                        f"停止するにはアプリケーションを終了してください。"
+                    )
+
+        except FileNotFoundError as e:
+            QMessageBox.warning(
+                self,
+                "警告",
+                str(e)
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"ros2 bag playの起動に失敗しました:\n{str(e)}"
+            )
+
     def _delete_selected(self):
         """Delete selected bag files."""
         selected = self._get_selected_files()
@@ -1028,5 +1121,6 @@ class BrowsePage(QWidget):
         self.open_btn.setEnabled(has_selection)
         self.repair_btn.setEnabled(has_error_files)  # Only enable if there are files with errors
         self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
+        self.play_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.delete_btn.setEnabled(has_selection)
         self.deselect_all_btn.setEnabled(has_selection)
