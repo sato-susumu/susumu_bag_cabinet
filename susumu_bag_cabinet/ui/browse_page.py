@@ -13,7 +13,6 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
 from susumu_bag_cabinet.utils.bag_utils import format_size, format_duration
-from susumu_bag_cabinet.utils.bag_operations import repair_bag
 from susumu_bag_cabinet.workers.bag_scanner import BagScanner
 from susumu_bag_cabinet.ui.custom_widgets import (
     LargeButton, DeleteButton, IndeterminateProgressDialog
@@ -130,10 +129,6 @@ class BrowsePage(QWidget):
         self.open_btn = LargeButton("オープンする", min_height=40, font_size=12)
         self.open_btn.clicked.connect(self._open_selected)
         button_layout2.addWidget(self.open_btn)
-
-        self.repair_btn = LargeButton("修復を試みる", min_height=40, font_size=12)
-        self.repair_btn.clicked.connect(self._repair_selected)
-        button_layout2.addWidget(self.repair_btn)
 
         self.foxglove_btn = LargeButton("Foxgloveで再生", min_height=40, font_size=12)
         self.foxglove_btn.clicked.connect(self._play_in_foxglove)
@@ -753,92 +748,6 @@ class BrowsePage(QWidget):
         except Exception as e:
             return f"SQLite詳細情報の取得に失敗: {str(e)}"
 
-    def _repair_selected(self):
-        """Repair selected bag files."""
-        selected = self._get_selected_files()
-        if not selected:
-            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
-            return
-
-        # Filter only files with integrity issues
-        files_to_repair = []
-        for file_path in selected:
-            if file_path in self.file_info:
-                is_valid = self.file_info[file_path].get("is_valid", "")
-                if is_valid == "NG" or "エラー" in str(is_valid):
-                    files_to_repair.append(file_path)
-
-        if not files_to_repair:
-            QMessageBox.information(
-                self,
-                "情報",
-                "選択されたファイルに修復が必要なものはありません。\n整合性チェックで「NG」と表示されたファイルのみ修復できます。"
-            )
-            return
-
-        # Confirm
-        reply = QMessageBox.question(
-            self,
-            "修復の確認",
-            f"{len(files_to_repair)}個のファイルを修復します。\n\nバックアップが作成され、修復されたファイルは別名で保存されます。\n続行しますか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-
-        if reply == QMessageBox.StandardButton.No:
-            return
-
-        # Create and show progress dialog immediately
-        from PySide6.QtWidgets import QProgressDialog
-        from PySide6.QtCore import QCoreApplication
-
-        progress = QProgressDialog(
-            "修復処理を開始しています...",
-            None,  # No cancel button
-            0,
-            0,  # 0 to 0 = indeterminate (busy indicator)
-            self
-        )
-        progress.setWindowTitle("修復中")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setAutoReset(False)
-        progress.setAutoClose(False)
-        progress.setMinimumWidth(400)
-        progress.setValue(0)  # Force display
-        progress.show()
-        progress.raise_()
-        progress.activateWindow()
-        QCoreApplication.processEvents()
-
-        # Process files
-        success_count = 0
-        failed_files = []
-
-        for i, file_path in enumerate(files_to_repair):
-            # Update progress
-            filename = Path(file_path).name
-            progress.setLabelText(f"修復中... ({i+1}/{len(files_to_repair)})\n{filename}")
-            QCoreApplication.processEvents()
-
-            success, message = repair_bag(file_path)
-            if success:
-                success_count += 1
-            else:
-                failed_files.append(f"{Path(file_path).name}: {message}")
-
-        progress.close()
-
-        # Show results
-        result_msg = f"修復完了: {success_count}/{len(files_to_repair)}個"
-        if failed_files:
-            result_msg += "\n\n失敗したファイル:\n" + "\n".join(failed_files[:5])
-            if len(failed_files) > 5:
-                result_msg += f"\n...他{len(failed_files) - 5}個"
-
-        QMessageBox.information(self, "修復結果", result_msg)
-        self._refresh()
-
     def _play_in_foxglove(self):
         """Play selected file in Foxglove Studio."""
         selected = self._get_selected_files()
@@ -1107,19 +1016,9 @@ class BrowsePage(QWidget):
         selected_files = self._get_selected_files()
         has_selection = len(selected_files) > 0
 
-        # Check if any selected files have integrity issues
-        has_error_files = False
-        for file_path in selected_files:
-            if file_path in self.file_info:
-                is_valid = self.file_info[file_path].get("is_valid", "")
-                if is_valid == "NG" or "エラー" in str(is_valid):
-                    has_error_files = True
-                    break
-
         # Enable/disable buttons based on selection
         self.info_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.open_btn.setEnabled(has_selection)
-        self.repair_btn.setEnabled(has_error_files)  # Only enable if there are files with errors
         self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.play_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.delete_btn.setEnabled(has_selection)
