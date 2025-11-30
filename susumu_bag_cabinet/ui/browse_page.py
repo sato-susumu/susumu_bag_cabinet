@@ -577,6 +577,10 @@ class BrowsePage(QWidget):
                     timeout=30
                 )
                 dialog_title = f"MCAP Info - {bag_file.name}"
+                if result.returncode == 0:
+                    output = result.stdout
+                else:
+                    output = f"エラーが発生しました:\n{result.stderr}"
             else:
                 # Use ros2 bag info for DB3 files or directories
                 target_path = str(path_obj) if path_obj.is_dir() else str(bag_file.parent)
@@ -588,10 +592,18 @@ class BrowsePage(QWidget):
                 )
                 dialog_title = f"Bag Info - {bag_file.name}"
 
-            if result.returncode == 0:
-                output = result.stdout
-            else:
-                output = f"エラーが発生しました:\n{result.stderr}"
+                if result.returncode == 0:
+                    output = result.stdout
+                    # Add detailed SQLite info for DB3 files
+                    db3_detail = self._get_db3_detailed_info(bag_file)
+                    if db3_detail:
+                        output += "\n" + "=" * 50 + "\n"
+                        output += "SQLite詳細情報:\n"
+                        output += "=" * 50 + "\n"
+                        output += db3_detail
+                else:
+                    output = f"エラーが発生しました:\n{result.stderr}"
+
         except FileNotFoundError as e:
             if is_mcap:
                 output = "mcapコマンドが見つかりません。\nmcap CLIツールをインストールしてください。"
@@ -623,6 +635,119 @@ class BrowsePage(QWidget):
 
         dialog.setLayout(layout)
         dialog.exec()
+
+    def _get_db3_detailed_info(self, db3_file: Path) -> str:
+        """Get detailed information from DB3 file using SQLite queries.
+
+        Args:
+            db3_file: Path to the DB3 file
+
+        Returns:
+            Detailed info string or empty string on error
+        """
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(db3_file))
+            cursor = conn.cursor()
+
+            output_lines = []
+
+            # Get table list
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            tables = cursor.fetchall()
+            output_lines.append(f"\nテーブル一覧: {', '.join([t[0] for t in tables])}\n")
+
+            # Get topics info
+            try:
+                cursor.execute("SELECT id, name, type, serialization_format FROM topics ORDER BY id")
+                topics = cursor.fetchall()
+                if topics:
+                    output_lines.append("\nトピック詳細:")
+                    output_lines.append("-" * 40)
+                    for topic in topics:
+                        topic_id, name, msg_type, serialization = topic
+                        # Count messages for this topic
+                        cursor.execute("SELECT COUNT(*) FROM messages WHERE topic_id = ?", (topic_id,))
+                        msg_count = cursor.fetchone()[0]
+
+                        # Calculate frequency (Hz) for this topic
+                        freq_str = "-"
+                        try:
+                            cursor.execute(
+                                "SELECT MIN(timestamp), MAX(timestamp) FROM messages WHERE topic_id = ?",
+                                (topic_id,)
+                            )
+                            topic_time_range = cursor.fetchone()
+                            if topic_time_range[0] and topic_time_range[1] and msg_count > 1:
+                                topic_duration_s = (topic_time_range[1] - topic_time_range[0]) / 1e9
+                                if topic_duration_s >= 1.0:
+                                    # Only calculate Hz if duration is at least 1 second
+                                    freq_hz = (msg_count - 1) / topic_duration_s
+                                    freq_str = f"{freq_hz:.2f} Hz"
+                        except sqlite3.Error:
+                            pass
+
+                        output_lines.append(f"  ID: {topic_id}")
+                        output_lines.append(f"  名前: {name}")
+                        output_lines.append(f"  型: {msg_type}")
+                        output_lines.append(f"  シリアライズ形式: {serialization}")
+                        output_lines.append(f"  メッセージ数: {msg_count}")
+                        output_lines.append(f"  出力頻度: {freq_str}")
+                        output_lines.append("-" * 40)
+            except sqlite3.Error:
+                pass
+
+            # Get total message count
+            try:
+                cursor.execute("SELECT COUNT(*) FROM messages")
+                total_messages = cursor.fetchone()[0]
+                output_lines.append(f"\n総メッセージ数: {total_messages}")
+            except sqlite3.Error:
+                pass
+
+            # Get time range from messages
+            try:
+                cursor.execute("SELECT MIN(timestamp), MAX(timestamp) FROM messages")
+                time_range = cursor.fetchone()
+                if time_range[0] and time_range[1]:
+                    # Timestamps are in nanoseconds
+                    start_ns = time_range[0]
+                    end_ns = time_range[1]
+                    duration_s = (end_ns - start_ns) / 1e9
+                    output_lines.append(f"開始タイムスタンプ: {start_ns} ns")
+                    output_lines.append(f"終了タイムスタンプ: {end_ns} ns")
+                    output_lines.append(f"記録時間: {duration_s:.3f} 秒")
+            except sqlite3.Error:
+                pass
+
+            # Get file size
+            file_size = db3_file.stat().st_size
+            if file_size < 1024:
+                size_str = f"{file_size} B"
+            elif file_size < 1024 * 1024:
+                size_str = f"{file_size / 1024:.1f} KB"
+            elif file_size < 1024 * 1024 * 1024:
+                size_str = f"{file_size / (1024 * 1024):.1f} MB"
+            else:
+                size_str = f"{file_size / (1024 * 1024 * 1024):.2f} GB"
+            output_lines.append(f"\nファイルサイズ: {size_str}")
+
+            # Get SQLite page info
+            try:
+                cursor.execute("PRAGMA page_count")
+                page_count = cursor.fetchone()[0]
+                cursor.execute("PRAGMA page_size")
+                page_size = cursor.fetchone()[0]
+                output_lines.append(f"SQLiteページ数: {page_count}")
+                output_lines.append(f"SQLiteページサイズ: {page_size} bytes")
+            except sqlite3.Error:
+                pass
+
+            conn.close()
+            return "\n".join(output_lines)
+
+        except Exception as e:
+            return f"SQLite詳細情報の取得に失敗: {str(e)}"
 
     def _repair_selected(self):
         """Repair selected bag files."""
