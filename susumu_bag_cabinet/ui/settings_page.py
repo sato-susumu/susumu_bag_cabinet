@@ -113,6 +113,24 @@ class SettingsPage(QWidget):
         foxglove_group.setLayout(foxglove_layout)
         layout.addWidget(foxglove_group)
 
+        # glim_rosbag settings group
+        glim_group = QGroupBox("glim_rosbag")
+        glim_layout = QVBoxLayout()
+
+        glim_path_layout = QHBoxLayout()
+        glim_path_layout.addWidget(QLabel("config_path:"))
+        self.glim_config_input = QLineEdit()
+        self.glim_config_input.setText(self.config.get_glim_config_path())
+        glim_path_layout.addWidget(self.glim_config_input, 1)
+
+        glim_browse_btn = QPushButton("参照...")
+        glim_browse_btn.clicked.connect(self._browse_glim_config)
+        glim_path_layout.addWidget(glim_browse_btn)
+
+        glim_layout.addLayout(glim_path_layout)
+        glim_group.setLayout(glim_layout)
+        layout.addWidget(glim_group)
+
         # Desktop shortcut group
         shortcut_group = QGroupBox("デスクトップショートカット")
         shortcut_layout = QVBoxLayout()
@@ -155,6 +173,17 @@ class SettingsPage(QWidget):
 
         if folder:
             self.folder_input.setText(folder)
+
+    def _browse_glim_config(self):
+        """Open folder browser dialog for glim config path."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "glim config_pathを選択",
+            self.glim_config_input.text()
+        )
+
+        if folder:
+            self.glim_config_input.setText(folder)
 
     def _update_preview(self):
         """Update filename preview."""
@@ -284,6 +313,7 @@ Categories=Development;Utility;
         self.config.set_robot_name(self.robot_input.text().strip())
         self.config.set_filename_include_robot_name(self.include_robot_checkbox.isChecked())
         self.config.set_foxglove_command(self.foxglove_input.text().strip())
+        self.config.set_glim_config_path(self.glim_config_input.text().strip())
         self.config.save()
 
         # Emit signal
@@ -301,6 +331,7 @@ Categories=Development;Utility;
         self.robot_input.setText(self.config.get_robot_name())
         self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
+        self.glim_config_input.setText(self.config.get_glim_config_path())
 
         self.home_clicked.emit()
 
@@ -310,6 +341,7 @@ Categories=Development;Utility;
         self.robot_input.setText(self.config.get_robot_name())
         self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
+        self.glim_config_input.setText(self.config.get_glim_config_path())
         self._update_preview()
 
     def _show_completion_dialog(self):

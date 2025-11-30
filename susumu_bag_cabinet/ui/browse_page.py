@@ -138,6 +138,10 @@ class BrowsePage(QWidget):
         self.play_btn.clicked.connect(self._play_in_ros2)
         button_layout2.addWidget(self.play_btn)
 
+        self.glim_btn = LargeButton("glim_rosbag", min_height=40, font_size=12)
+        self.glim_btn.clicked.connect(self._run_glim_rosbag)
+        button_layout2.addWidget(self.glim_btn)
+
         layout.addLayout(button_layout2)
 
         # Delete button (in a separate row for safety)
@@ -916,6 +920,97 @@ class BrowsePage(QWidget):
                 f"ros2 bag playの起動に失敗しました:\n{str(e)}"
             )
 
+    def _run_glim_rosbag(self):
+        """Run glim_rosbag on selected file."""
+        selected = self._get_selected_files()
+
+        if len(selected) == 0:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        if len(selected) > 1:
+            QMessageBox.warning(
+                self,
+                "警告",
+                "ファイルを1つだけ選択してください。"
+            )
+            return
+
+        file_path = selected[0]
+
+        try:
+            path_obj = Path(file_path)
+            bag_path = None
+
+            # glim_rosbag requires the bag directory path (containing metadata.yaml)
+            if path_obj.is_dir():
+                if (path_obj / "metadata.yaml").exists():
+                    bag_path = str(path_obj)
+                else:
+                    raise FileNotFoundError(
+                        f"metadata.yamlが見つかりません。\n"
+                        f"有効なROS2 bagディレクトリではない可能性があります。"
+                    )
+            elif path_obj.is_file():
+                parent = path_obj.parent
+                if (parent / "metadata.yaml").exists():
+                    bag_path = str(parent)
+                else:
+                    raise FileNotFoundError(
+                        f"metadata.yamlが見つかりません。\n"
+                        f"有効なROS2 bagディレクトリではない可能性があります。"
+                    )
+            else:
+                raise FileNotFoundError(f"ファイルまたはディレクトリが見つかりません: {file_path}")
+
+            if bag_path:
+                config_path = self.config.get_glim_config_path()
+                cmd = [
+                    'ros2', 'run', 'glim_ros', 'glim_rosbag',
+                    bag_path,
+                    '--ros-args', '-p', f'config_path:={config_path}'
+                ]
+                print(f"Running: {' '.join(cmd)}")  # Debug
+
+                # Try common terminal emulators
+                terminal_commands = [
+                    ['gnome-terminal', '--'] + cmd,
+                    ['xterm', '-e'] + cmd,
+                    ['konsole', '-e'] + cmd,
+                ]
+
+                launched = False
+                for terminal_cmd in terminal_commands:
+                    try:
+                        subprocess.Popen(terminal_cmd)
+                        launched = True
+                        break
+                    except FileNotFoundError:
+                        continue
+
+                if not launched:
+                    subprocess.Popen(cmd)
+                    QMessageBox.information(
+                        self,
+                        "glim_rosbag開始",
+                        f"glim_rosbagを開始しました。\n\n"
+                        f"ターミナルエミュレータが見つからなかったため、"
+                        f"バックグラウンドで実行しています。"
+                    )
+
+        except FileNotFoundError as e:
+            QMessageBox.warning(
+                self,
+                "警告",
+                str(e)
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"glim_rosbagの起動に失敗しました:\n{str(e)}"
+            )
+
     def _delete_selected(self):
         """Delete selected bag files."""
         selected = self._get_selected_files()
@@ -1021,5 +1116,6 @@ class BrowsePage(QWidget):
         self.open_btn.setEnabled(has_selection)
         self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.play_btn.setEnabled(len(selected_files) == 1)  # Only for single file
+        self.glim_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.delete_btn.setEnabled(has_selection)
         self.deselect_all_btn.setEnabled(has_selection)

@@ -16,6 +16,7 @@ class Config:
         "robot_name": "",
         "foxglove_command": "foxglove-studio",
         "filename_include_robot_name": False,
+        "glim_config_path": "/home/taro/ros2_ws/src/susumu_robo/mapping/config/livox",
     }
 
     def __init__(self):
@@ -90,3 +91,11 @@ class Config:
     def set_filename_include_robot_name(self, include: bool) -> None:
         """Set whether to include robot name in filename."""
         self.config["filename_include_robot_name"] = include
+
+    def get_glim_config_path(self) -> str:
+        """Get the glim_rosbag config path."""
+        return self.config.get("glim_config_path", self.DEFAULT_CONFIG["glim_config_path"])
+
+    def set_glim_config_path(self, path: str) -> None:
+        """Set the glim_rosbag config path."""
+        self.config["glim_config_path"] = path
