@@ -80,7 +80,7 @@ class RecordPage(QWidget):
         # MCAP format checkbox
         mcap_layout = QHBoxLayout()
         self.mcap_checkbox = QCheckBox("MCAPフォーマットを使用する")
-        self.mcap_checkbox.setChecked(False)  # デフォルトはOFF
+        self.mcap_checkbox.setChecked(True)  # デフォルトはON
         mcap_layout.addWidget(self.mcap_checkbox)
         mcap_layout.addStretch()
         settings_layout.addLayout(mcap_layout)
