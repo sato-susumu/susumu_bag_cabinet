@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QCheckBox, QDialog, QTextEdit
 )
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from susumu_bag_cabinet.utils.config import Config
 from susumu_bag_cabinet.utils.bag_utils import format_size, format_duration
@@ -141,6 +142,10 @@ class BrowsePage(QWidget):
         self.glim_btn = LargeButton("glim_rosbag", min_height=40, font_size=12)
         self.glim_btn.clicked.connect(self._run_glim_rosbag)
         button_layout2.addWidget(self.glim_btn)
+
+        self.copy_path_btn = LargeButton("パスをコピー", min_height=40, font_size=12)
+        self.copy_path_btn.clicked.connect(self._copy_paths)
+        button_layout2.addWidget(self.copy_path_btn)
 
         layout.addLayout(button_layout2)
 
@@ -1011,6 +1016,35 @@ class BrowsePage(QWidget):
                 f"glim_rosbagの起動に失敗しました:\n{str(e)}"
             )
 
+    def _copy_paths(self):
+        """Copy selected file paths to clipboard."""
+        selected = self._get_selected_files()
+
+        if len(selected) == 0:
+            QMessageBox.information(self, "情報", "ファイルが選択されていません。")
+            return
+
+        # Join paths with newlines
+        paths_text = "\n".join(selected)
+
+        # Copy to clipboard
+        clipboard = QApplication.clipboard()
+        clipboard.setText(paths_text)
+
+        # Show confirmation
+        if len(selected) == 1:
+            QMessageBox.information(
+                self,
+                "コピー完了",
+                f"パスをクリップボードにコピーしました:\n{selected[0]}"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "コピー完了",
+                f"{len(selected)}個のパスをクリップボードにコピーしました。"
+            )
+
     def _delete_selected(self):
         """Delete selected bag files."""
         selected = self._get_selected_files()
@@ -1117,5 +1151,6 @@ class BrowsePage(QWidget):
         self.foxglove_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.play_btn.setEnabled(len(selected_files) == 1)  # Only for single file
         self.glim_btn.setEnabled(len(selected_files) == 1)  # Only for single file
+        self.copy_path_btn.setEnabled(has_selection)
         self.delete_btn.setEnabled(has_selection)
         self.deselect_all_btn.setEnabled(has_selection)
