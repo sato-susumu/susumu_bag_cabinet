@@ -110,7 +110,7 @@ class RecordPage(QWidget):
         # Elapsed time
         status_layout.addWidget(QLabel("経過時間:"))
         self.time_label = QLabel("00:00:00")
-        self.time_label.setFont(FontHelper.create_status_font())
+        self.time_label.setFont(FontHelper.create_status_font(size=56))
         status_layout.addWidget(self.time_label)
 
         # File size
