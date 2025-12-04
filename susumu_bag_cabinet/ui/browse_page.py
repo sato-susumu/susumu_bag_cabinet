@@ -970,10 +970,19 @@ class BrowsePage(QWidget):
 
             if bag_path:
                 config_path = self.config.get_glim_config_path()
+                dump_path_base = self.config.get_glim_dump_path()
+
+                # Generate dump_path: base + bag folder name + _ + config folder name
+                bag_folder_name = Path(bag_path).name
+                config_folder_name = Path(config_path).name
+                dump_path = f"{dump_path_base}/{bag_folder_name}_{config_folder_name}"
+
                 cmd = [
                     'ros2', 'run', 'glim_ros', 'glim_rosbag',
                     bag_path,
-                    '--ros-args', '-p', f'config_path:={config_path}'
+                    '--ros-args',
+                    '-p', f'config_path:={config_path}',
+                    '-p', f'dump_path:={dump_path}'
                 ]
                 print(f"Running: {' '.join(cmd)}")  # Debug
 
