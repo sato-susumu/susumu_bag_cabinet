@@ -219,7 +219,8 @@ class BrowsePage(QWidget):
         Args:
             file_paths: List of bag file paths found
         """
-        self.bag_files = file_paths
+        # Sort by filename in descending order (newest first based on YYYYMMDD_HHMMSS format)
+        self.bag_files = sorted(file_paths, key=lambda p: Path(p).name, reverse=True)
         self._populate_table()
 
         if file_paths:
@@ -970,12 +971,12 @@ class BrowsePage(QWidget):
 
             if bag_path:
                 config_path = self.config.get_glim_config_path()
-                dump_path_base = self.config.get_glim_dump_path()
 
-                # Generate dump_path: base + bag folder name + _ + config folder name
-                bag_folder_name = Path(bag_path).name
+                # Generate dump_path: bag_path/glim/<execution_datetime>_<config_folder_name>
+                from datetime import datetime
+                execution_time = datetime.now().strftime("%Y%m%d_%H%M%S")
                 config_folder_name = Path(config_path).name
-                dump_path = f"{dump_path_base}/{bag_folder_name}_{config_folder_name}"
+                dump_path = f"{bag_path}/glim/{execution_time}_{config_folder_name}"
 
                 cmd = [
                     'ros2', 'run', 'glim_ros', 'glim_rosbag',

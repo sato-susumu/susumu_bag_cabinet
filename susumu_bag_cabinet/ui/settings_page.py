@@ -129,19 +129,6 @@ class SettingsPage(QWidget):
 
         glim_layout.addLayout(glim_path_layout)
 
-        # dump_path base directory
-        dump_path_layout = QHBoxLayout()
-        dump_path_layout.addWidget(QLabel("dump_path基準フォルダ:"))
-        self.glim_dump_path_input = QLineEdit()
-        self.glim_dump_path_input.setText(self.config.get_glim_dump_path())
-        dump_path_layout.addWidget(self.glim_dump_path_input, 1)
-
-        dump_browse_btn = QPushButton("参照...")
-        dump_browse_btn.clicked.connect(self._browse_glim_dump_path)
-        dump_path_layout.addWidget(dump_browse_btn)
-
-        glim_layout.addLayout(dump_path_layout)
-
         glim_group.setLayout(glim_layout)
         layout.addWidget(glim_group)
 
@@ -198,17 +185,6 @@ class SettingsPage(QWidget):
 
         if folder:
             self.glim_config_input.setText(folder)
-
-    def _browse_glim_dump_path(self):
-        """Open folder browser dialog for glim dump_path base directory."""
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "dump_path基準フォルダを選択",
-            self.glim_dump_path_input.text()
-        )
-
-        if folder:
-            self.glim_dump_path_input.setText(folder)
 
     def _update_preview(self):
         """Update filename preview."""
@@ -339,7 +315,6 @@ Categories=Development;Utility;
         self.config.set_filename_include_robot_name(self.include_robot_checkbox.isChecked())
         self.config.set_foxglove_command(self.foxglove_input.text().strip())
         self.config.set_glim_config_path(self.glim_config_input.text().strip())
-        self.config.set_glim_dump_path(self.glim_dump_path_input.text().strip())
         self.config.save()
 
         # Emit signal
@@ -358,7 +333,6 @@ Categories=Development;Utility;
         self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
         self.glim_config_input.setText(self.config.get_glim_config_path())
-        self.glim_dump_path_input.setText(self.config.get_glim_dump_path())
 
         self.home_clicked.emit()
 
@@ -369,7 +343,6 @@ Categories=Development;Utility;
         self.include_robot_checkbox.setChecked(self.config.get_folder_include_robot_name())
         self.foxglove_input.setText(self.config.get_foxglove_command())
         self.glim_config_input.setText(self.config.get_glim_config_path())
-        self.glim_dump_path_input.setText(self.config.get_glim_dump_path())
         self._update_preview()
 
     def _show_completion_dialog(self):
